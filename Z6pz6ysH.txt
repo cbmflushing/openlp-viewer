@@ -1,4 +1,11 @@
-
+<!--
+  CBM Lyrics Display
+  Single-page display for projecting bilingual (English/Chinese) song lyrics during worship.
+  Polls the OpenLP REST API every second and renders the currently selected slide.
+  English lines are shown in white, Chinese lines in yellow, on a green background by default.
+  All colors, fonts, server IP, and CCLI number are configurable via a settings modal and
+  persisted in localStorage. Press '.' to toggle a blackout screen.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -259,6 +266,7 @@
         body.hidden-content {
             background-color: black !important;
         }
+        /* '.' keypress toggles hidden-content to blackout the screen */
     </style>
 </head>
 <body>
@@ -350,6 +358,7 @@
     </div>
 
     <script>
+        // Fallback values used on first run or if localStorage is corrupt
         const DEFAULT_SETTINGS = {
             serverIp: 'localhost:4316',
             bgColor: '#006400',
@@ -446,6 +455,9 @@
             document.getElementById('modal-overlay').classList.remove('hidden');
         }
         
+        // Fetches the current live slide from OpenLP and updates the display.
+        // OpenLP wraps Chinese text in <span> tags; English is the remaining plain text.
+        // Song titles matching c### / h### / ch### are decoded as Chorus / Hymnary / Songbook.
         async function fetchAndDisplay() {
             try {
                 const url = `http://${settings.serverIp}/api/controller/live/text`;
@@ -513,6 +525,7 @@
                 
                 text = text.replace(/<br\s*\/?>/gi, '\n');
                 
+                // Chinese text arrives inside <span> tags; extract and deduplicate lines
                 let chineseLinesSet = new Set();
                 let chineseMatches = text.matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi);
                 for (const match of chineseMatches) {
@@ -523,6 +536,7 @@
                     });
                 }
                 
+                // Strip span tags to leave only English text
                 let englishText = text.replace(/<span[^>]*>[\s\S]*?<\/span>/gi, '').trim();
                 let englishLines = englishText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
                 
