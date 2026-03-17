@@ -268,7 +268,7 @@
     <div id="footer">CBM Flushing</div>
     <button id="settings-btn" onclick="showSettings()">&#8942;&#8942;&#8942;</button>
     
-    <div id="modal-overlay">
+    <div id="modal-overlay" class="hidden">
         <div id="modal">
             <h2>CBM Lyrics Display</h2>
             <p>This display fetches lyrics from OpenLP and shows them with English in white and Chinese in yellow on a green background.</p>
@@ -368,7 +368,11 @@
         function loadSettings() {
             const saved = localStorage.getItem('cbmDisplaySettings');
             if (saved) {
-                settings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+                try {
+                    settings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+                } catch (e) {
+                    settings = { ...DEFAULT_SETTINGS };
+                }
             }
             applySettings();
         }
@@ -473,6 +477,7 @@
                 if (!currentSlide || !currentSlide.text) {
                     document.getElementById('content').innerHTML = '';
                     document.getElementById('title-display').textContent = '';
+                    updateFooter();
                     return;
                 }
                 
@@ -497,7 +502,10 @@
                     }
                 }
                 
-                let footerHtml = 'CBM Flushing © CCLI# 26557';
+                let footerHtml = 'CBM Flushing';
+                if (settings.ccliNumber) {
+                    footerHtml += ' © CCLI# ' + settings.ccliNumber;
+                }
                 footerHtml += footerExtra;
                 document.getElementById('footer').innerHTML = footerHtml;
                 
