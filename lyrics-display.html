@@ -302,6 +302,14 @@
                 <input type="text" id="server-ip" value="localhost:4316" placeholder="e.g., 100.77.252.6:4316">
             </div>
             
+            <div class="form-group">
+                <label for="display-language">Display Language</label>
+                <select id="display-language">
+                    <option value="bilingual">English + Chinese</option>
+                    <option value="english">English only</option>
+                </select>
+            </div>
+
             <div class="form-row">
                 <div class="form-group">
                     <label>Background Color</label>
@@ -376,6 +384,7 @@
         // Fallback values used on first run or if localStorage is corrupt
         const DEFAULT_SETTINGS = {
             serverIp: 'localhost:4316',
+            displayLanguage: 'bilingual',
             bgColor: '#006400',
             englishColor: '#ffffff',
             chineseColor: '#ffff00',
@@ -403,6 +412,7 @@
         
         function saveSettings() {
             settings.serverIp = document.getElementById('server-ip').value.trim() || 'localhost:4316';
+            settings.displayLanguage = document.getElementById('display-language').value;
             settings.bgColor = document.getElementById('bg-color').value;
             settings.englishColor = document.getElementById('english-color').value;
             settings.chineseColor = document.getElementById('chinese-color').value;
@@ -426,6 +436,7 @@
             document.body.style.setProperty('--chinese-font', settings.chineseFont);
             
             document.getElementById('server-ip').value = settings.serverIp;
+            document.getElementById('display-language').value = settings.displayLanguage;
             document.getElementById('bg-color').value = settings.bgColor;
             document.getElementById('english-color').value = settings.englishColor;
             document.getElementById('chinese-color').value = settings.chineseColor;
@@ -534,9 +545,10 @@
                     }
                 }
                 
-                const { englishLines, chineseLines } = parseSlideLines(
+                const { englishLines, chineseLines: parsedChineseLines } = parseSlideLines(
                     currentSlide ? (currentSlide.html || currentSlide.text || '') : ''
                 );
+                const chineseLines = settings.displayLanguage === 'english' ? [] : parsedChineseLines;
                 if (!englishLines.length && !chineseLines.length) {
                     clearSlide();
                     return;

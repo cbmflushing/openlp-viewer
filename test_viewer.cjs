@@ -173,6 +173,49 @@ async function display(value) { payload = value; await context.fetchAndDisplay()
         context.showSettings();
         assert.equal(input.value, 'saved.example:4316');
     }
+    // Language settings default for both new and pre-existing saved configurations.
+    stored = JSON.stringify({serverIp: 'legacy.example:4316', firstRun: false});
+    context.loadSettings();
+    const language = get('display-language');
+    assert.equal(language.value, 'bilingual');
+    const languageSelect = html.match(/<select id="display-language">([\s\S]*?)<\/select>/);
+    assert.ok(languageSelect, 'settings expose a display-language selector');
+    assert.deepEqual([...languageSelect[1].matchAll(/<option value="([^"]+)"/g)].map(m => m[1]),
+        ['bilingual', 'english']);
+    networkError = false;
+    await display(slide({html: '<em>First</em><br>奇異恩典<br>Second<sup>2</sup>', title: 'c123'}));
+    assert.match(get('content').innerHTML, /class="chinese">奇異恩典/);
+
+    context.showSettings();
+    language.value = 'english';
+    context.closeModal(true);
+    assert.equal(JSON.parse(stored).displayLanguage, 'english');
+    await context.fetchAndDisplay();
+    assert.equal(get('content').innerHTML,
+        '<p class="english"><em>First</em></p><p class="english">Second<sup>2</sup></p>');
+    assert.match(get('footer').innerHTML, /Chorus #123/);
+    context.loadSettings(); // Reload saved settings into the active state.
+    context.showSettings();
+    assert.equal(language.value, 'english');
+    for (const dismiss of [() => context.closeModal(false), () => key('Escape'), () => overlay.click()]) {
+        language.value = 'bilingual';
+        dismiss();
+        await context.fetchAndDisplay();
+        assert.doesNotMatch(get('content').innerHTML, /class="chinese"/);
+        context.showSettings();
+        assert.equal(language.value, 'english');
+    }
+    await display(slide({html: '奇異恩典', title: 'c123'}));
+    assert.equal(dark(), true);
+    assert.equal(get('content').innerHTML, '');
+    assert.equal(get('title-display').textContent, '');
+    assert.doesNotMatch(get('footer').innerHTML, /Chorus/);
+    context.resetSettings();
+    assert.equal(language.value, 'bilingual');
+    await display(slide({text: '奇異恩典'}));
+    assert.match(get('content').innerHTML, /class="chinese">奇異恩典/);
+    assert.equal(dark(), false);
+
     assert.match(html, /transition: opacity 0\.3s ease/);
     assert.match(html, /pointer-events: none/);
     console.log('All offline viewer regression tests passed.');

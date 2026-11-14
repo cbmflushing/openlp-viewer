@@ -9,7 +9,7 @@ A standalone browser page for displaying live OpenLP lyrics on a projector or se
 3. In the settings dialog, enter the **OpenLP Server IP** as a host and port, without `http://`:
    - Same computer as OpenLP: `localhost:4316`
    - Another computer: for example, `192.168.1.160:4316`
-4. Choose colors and fonts, optionally enable the song title, and enter the CCLI license number (`26557` for CBM Flushing).
+4. Choose the display language, colors, and fonts, optionally enable the song title, and enter the CCLI license number (`26557` for CBM Flushing).
 5. Click **Save & Start**.
 6. Send a song live in OpenLP. Move the browser to the display screen and use the browser's full-screen mode.
 
@@ -17,16 +17,17 @@ The viewer checks for the selected live slide every second. Settings are saved i
 
 ## Controls
 
-- **Settings button:** reopen settings to change the server, appearance, title, or CCLI number.
+- **Settings button:** reopen settings to change the server, display language, appearance, title, or CCLI number. Save to apply changes; Skip, Escape, or clicking outside the dialog discards unsaved changes.
 - **`.` (period):** toggle local blackout. This affects only this viewer, not OpenLP or other displays.
 - **Reset:** restore the default settings.
 
 ## Display behavior
 
-- English lines appear first, followed by Chinese lines.
+- The default display language is **English + Chinese**; **English only** hides lines classified as Chinese. The saved choice persists in the browser, and Reset restores bilingual display.
+- English lines appear first, followed by Chinese lines when enabled.
 - Chinese is detected from the text itself, not HTML formatting: a line is Chinese when more than 30% of its non-whitespace characters are Chinese characters.
 - Chinese lines have whitespace removed and duplicates collapsed. Keep English and Chinese on separate lines; mixed-language lines are classified as a whole.
-- Empty slides fade to black in about 300 ms; lyrics returning restores the display. This is **not** synchronization with OpenLP's blackout button.
+- Empty slides, including slides with no visible lyrics after language filtering, fade to black in about 300 ms; lyrics returning restores the display. This is **not** synchronization with OpenLP's blackout button.
 - Network errors preserve the last display state rather than treating the slide as empty.
 
 ## Troubleshooting
