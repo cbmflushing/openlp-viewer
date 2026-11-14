@@ -186,6 +186,13 @@
             color: #fff;
         }
         
+        #viewer-version {
+            color: #aaa;
+            font-size: 12px;
+            font-weight: normal;
+            white-space: nowrap;
+        }
+
         #modal p {
             margin-bottom: 15px;
             line-height: 1.5;
@@ -304,6 +311,91 @@
             background: #666;
         }
         
+        /* Sketchbook styling is limited to the settings interface. */
+        #settings-btn {
+            background: #faf7ef;
+            color: #302d35;
+            border: 2px solid #39343b;
+            border-radius: 9px 6px 8px 5px;
+            box-shadow: 2px 2px 0 #39343b;
+        }
+        #settings-btn:hover { background: #e5e0f2; }
+        #settings-btn:focus-visible {
+            opacity: 1;
+            transition: none;
+            outline: 3px solid #6554a4;
+            outline-offset: 3px;
+        }
+        #modal-overlay { background: rgba(36, 32, 37, 0.72); }
+        #modal {
+            background: #faf7ef;
+            color: #302d35;
+            border: 2px solid #39343b;
+            border-radius: 16px 12px 17px 11px;
+            box-shadow: 5px 5px 0 #39343b, 0 12px 35px rgba(0,0,0,0.3);
+        }
+        #modal h2 {
+            color: #302d35;
+            font-family: "Comic Sans MS", "Chalkboard SE", "Bradley Hand", cursive;
+        }
+        #modal #viewer-version { color: #625b66; font-family: "Segoe UI", Arial, sans-serif; }
+        #modal .form-group label { color: #49434b; font-weight: 600; }
+        #modal .form-group select,
+        #modal .form-group input[type="text"],
+        #modal .form-group input[type="color"] {
+            background: #fffdf7;
+            color: #302d35;
+            border: 2px solid #514a52;
+            border-radius: 7px 5px 8px 6px;
+        }
+        #modal .form-group input::placeholder { color: #706a70; opacity: 1; }
+        #modal input[type="checkbox"] { accent-color: #6554a4; }
+        #modal .color-setting { grid-template-columns: 78px minmax(0, 1fr); }
+        #modal .color-swatches { gap: 2px; }
+        #modal .color-swatch {
+            border: 2px solid #514a52;
+            border-radius: 6px 4px 5px 4px;
+        }
+        #modal .color-swatch[aria-pressed="true"] { box-shadow: 2px 2px 0 #39343b; }
+        #modal .color-setting summary { color: #514477; font-weight: 600; }
+        #modal .color-setting summary:hover { color: #302549; text-decoration: underline; }
+        #modal .color-error { color: #862525; font-weight: 600; }
+        #modal .color-setting input[aria-invalid="true"] { border-color: #a63636; background: #fff1eb; }
+        #modal :focus-visible { outline: 3px solid #6554a4; outline-offset: 2px; }
+        #modal #modal-buttons button {
+            border: 2px solid #39343b;
+            border-radius: 8px 6px 9px 5px;
+            box-shadow: 2px 2px 0 #39343b;
+            color: #302d35;
+            font-weight: 600;
+        }
+        #modal #reset-btn { background: #efd6ce; }
+        #modal #reset-btn:hover { background: #e5bdb2; }
+        #modal #skip-btn { background: #ece8de; }
+        #modal #skip-btn:hover { background: #ded9cc; }
+        #modal #save-btn { background: #d8d0ed; }
+        #modal #save-btn:hover { background: #c6bae4; }
+        #modal #modal-buttons button:active { box-shadow: 1px 1px 0 #39343b; transform: translate(1px, 1px); }
+        @media (max-width: 480px) {
+            #modal { padding: 20px; }
+            #modal .form-row .form-group { min-width: 0; }
+            #modal .color-swatch { width: 20px; }
+            #modal #modal-buttons button { min-width: 0; padding: 10px 5px; }
+        }
+
+        /* Touch devices cannot reveal the launcher by hovering. */
+        @media (pointer: coarse) {
+            body #settings-btn { opacity: 0.85; width: 44px; height: 44px; z-index: 1000; }
+            #modal .form-group select,
+            #modal .form-group input[type="text"],
+            #modal .form-group input[type="color"],
+            #modal #modal-buttons button { min-height: 44px; }
+            #modal .form-group label:has(input[type="checkbox"]) { min-height: 44px; }
+            #modal .color-swatches { padding-right: 0; gap: 4px; }
+            #modal .color-swatch { width: 44px; height: 44px; }
+            #modal .color-setting summary { position: static; min-height: 44px; margin: 0; padding: 14px 0; }
+        }
+
         .hidden {
             display: none !important;
         }
@@ -330,13 +422,13 @@
     
     <div id="modal-overlay" class="hidden">
         <div id="modal">
-            <h2>CBM Lyrics Display</h2>
+            <h2>CBM Lyrics Display <small id="viewer-version"></small></h2>
             <p>This display fetches lyrics from OpenLP and shows them with English in white and Chinese in yellow on a green background.</p>
             <p>Configure the OpenLP server IP and customize colors below:</p>
             
             <div class="form-group">
                 <label>OpenLP Server IP</label>
-                <input type="text" id="server-ip" value="localhost:4316" placeholder="e.g., 100.77.252.6:4316">
+                <input type="text" id="server-ip" value="localhost:4316" placeholder="e.g., 192.0.2.1:4316">
             </div>
             
             <div class="form-group">
@@ -513,6 +605,9 @@
     </div>
 
     <script>
+        const VIEWER_VERSION = '1.0.0';
+        document.getElementById('viewer-version').textContent = 'v' + VIEWER_VERSION;
+
         // Fallback values used on first run or if localStorage is corrupt
         const DEFAULT_SETTINGS = {
             serverIp: 'localhost:4316',

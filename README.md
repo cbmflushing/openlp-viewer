@@ -8,7 +8,7 @@ A standalone browser page for displaying live OpenLP lyrics on a projector or se
 2. Open [`lyrics-display.html`](lyrics-display.html) in a browser.
 3. In the settings dialog, enter the **OpenLP Server IP** as a host and port, without `http://`:
    - Same computer as OpenLP: `localhost:4316`
-   - Another computer: for example, `192.168.1.212:4316`
+   - Another computer: enter the OpenLP computer's address followed by `:4316` (for example, `openlp.example:4316`).
 4. Choose the display language, colors, and fonts, optionally enable the song title, and enter the CCLI license number (`26557` for CBM Flushing).
 5. Click **Save & Start**.
 6. Send a song live in OpenLP. Move the browser to the display screen and use the browser's full-screen mode.
@@ -17,7 +17,7 @@ The viewer refreshes immediately when OpenLP sends a WebSocket state notificatio
 
 ## Controls
 
-- **Settings button:** reopen settings to change the server, display language, appearance, title, or CCLI number. Save to apply changes; Skip, Escape, or clicking outside the dialog discards unsaved changes.
+- **Settings button:** reopen settings to change the server, display language, appearance, title, or CCLI number. On touch devices the button stays visible. The viewer version appears beside the settings heading. Save to apply changes; Skip, Escape, or clicking outside the dialog discards unsaved changes.
 - **`.` (period):** toggle local blackout. This affects only this viewer, not OpenLP or other displays.
 - **Colors:** choose a preset swatch for the background, English, Chinese, or footer. The selected HEX value appears beneath each palette, including for custom colors. Expand **Advanced** to use the custom picker, enter a six-digit HEX value (for example, `#12ab34`), or edit the red, green, and blue channels (whole numbers from 0 to 255). Invalid or incomplete values are highlighted and must be corrected before saving; choosing a preset or picker color also replaces them.
 - **Reset:** restore the default settings.
@@ -43,19 +43,19 @@ The viewer refreshes immediately when OpenLP sends a WebSocket state notificatio
 
 Use only trusted OpenLP content: English slide formatting is rendered as HTML. Keep the remote API on a trusted network.
 
-## Live-update module
+## Automatic versioning for contributors
 
-`createLiveUpdate({ onData, onError })` lives inside `lyrics-display.html`, keeping the page standalone. Its public lifecycle is:
+The standalone page has no runtime dependency or build step. Contributors may opt in to a local Git pre-commit hook (requires Git and Node.js available as `node` on every commit):
 
-- `start(server)` starts an immediate read, one-second fallback polling, and WebSocket discovery.
-- `switchServer(server)` replaces the active connection (also when the server is unchanged).
-- `stop()` invalidates outstanding work, closes the socket, and clears owned timers. It is safe to call repeatedly; `start` can restart it later.
+```sh
+node scripts/install-version-hook.cjs
+```
 
-Both start methods replace any prior lifetime. Only current results reach `onData` (raw parsed JSON) or `onError` (live-slide request failures). Push notifications coalesce refreshes and supersede older results; polling does not invalidate slow valid reads. Requests, including JSON parsing, have five-second timeouts even without abort support. Discovery failures use port `4317`; reconnect delays grow from two to thirty seconds and reset after a successful open. Server changes and stop reject stale requests, errors, discovery, and delayed Blob notifications.
+Run this once per clone/worktree as appropriate; rerunning it is safe. The installer refuses an existing `core.hooksPath` configuration or a different pre-commit hook rather than replacing it. If you already have hooks, integrate `node scripts/bump-viewer-version.cjs` into your existing pre-commit hook yourself, preserving its other checks.
 
-The module owns connection state, not presentation. The viewer's `displayLiveData` interprets selected slides and controls lyrics, language, title/footer, fitting and fade; `displayLiveError` preserves the last display while reporting errors. Successful empty-slide responses still clear/fade the display. Settings saves and reset use the lifecycle rather than connection internals.
+The first commit introducing `VIEWER_VERSION` must contain `1.0.0`. Thereafter each ordinary commit using the hook increments the minor component from `HEAD` and resets the patch to zero, including commits with no other viewer changes. The hook updates and stages only `lyrics-display.html`; a failed commit leaves the bump staged, and a retry derives the same version from unchanged `HEAD`. It refuses unstaged or unmerged HTML, and refuses assume-unchanged/skip-worktree flags on that file. Stage or stash all HTML edits before committing. It also refuses alternate/temporary indexes, including path-limited commits; stage the desired files and use a normal `git commit` without path arguments instead. Unrelated staged files are left intact.
 
-Tests can supply limited `network` (`fetch`, `WebSocket`, `AbortController`, `Blob`, `URL`) and `clock` (`setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`) adapters. Each supplied adapter replaces its browser-default counterpart; no production dependency is required.
+Git hooks are local, are not installed automatically in new clones, and can be bypassed with `--no-verify`. Operations that do not invoke pre-commit, such as automated merges or rebases, do not necessarily bump the version. This is a convenience, not enforced release/version policy. Custom Git filters that rewrite the version declaration are not supported. Review the staged version after failed commits or bypassed operations.
 
 ## Tests
 
@@ -65,18 +65,26 @@ From this directory, run offline regression tests (requires Node.js):
 node test_viewer.cjs
 node test_websocket.cjs
 node test_live_update.cjs
+node test_gitignore.cjs
+node --test test_version_hook.cjs
 ```
 
-Real-browser layout checks additionally require Google Chrome (or pass a Chromium executable path):
+Browser checks additionally require Google Chrome (or pass a Chromium executable path). The tablet touch-emulation test requires Node.js 22 or newer:
 
 ```sh
 node test_layout.cjs
 node test_layout.cjs /path/to/chromium
 node test_colors.cjs
 node test_colors.cjs /path/to/chromium
+node test_sketch.cjs
+node test_sketch.cjs /path/to/chromium
+node test_tablet.cjs
+node test_tablet.cjs /path/to/chromium
+node test_version.cjs
+node test_version.cjs /path/to/chromium
 ```
 
-The integration script additionally requires Python 3 and a live OpenLP server at `http://192.168.1.212:4316`:
+The integration script requires Python 3 and a live OpenLP server. Its `SERVER` value is hard-coded in `test_integration.py`; inspect it before running, and adjust it locally if your server is elsewhere. There is no command-line server override:
 
 ```sh
 python3 test_integration.py

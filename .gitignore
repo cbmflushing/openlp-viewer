@@ -1,0 +1,24 @@
+# Local environment and dependencies
+.env
+.env.*
+node_modules/
+.venv/
+venv/
+
+# Generated caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# Local work and machine-specific settings
+.scratch/
+**/.claude/settings.local.json
+
+# Logs
+*.log
+*.log.*
+
+# OS metadata
+.DS_Store
