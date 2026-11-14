@@ -6,6 +6,7 @@ Run: python3 test_integration.py
 """
 
 import json
+from html.parser import HTMLParser
 import re
 import sys
 import urllib.request
@@ -83,21 +84,30 @@ def parse_slide(slide):
     text = slide.get("html") or slide.get("text", "")
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
 
-    # Extract Chinese lines from <span> tags (deduplicated)
-    chinese_set = []
-    seen = set()
-    for m in re.finditer(r"<span[^>]*>([\s\S]*?)</span>", text, re.IGNORECASE):
-        for line in m.group(1).split("\n"):
-            cleaned = re.sub(r"\s+", "", line.strip())
-            if cleaned and cleaned not in seen:
-                seen.add(cleaned)
-                chinese_set.append(cleaned)
+    class VisibleText(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.parts = []
 
-    # English = everything outside <span> tags
-    english_text = re.sub(r"<span[^>]*>[\s\S]*?</span>", "", text, flags=re.IGNORECASE).strip()
-    english_lines = [l.strip() for l in english_text.split("\n") if l.strip()]
+        def handle_data(self, data):
+            self.parts.append(data)
 
-    return english_lines, chinese_set
+    english_lines = []
+    chinese_lines = []
+    for line in text.split("\n"):
+        parser = VisibleText()
+        parser.feed(line)
+        visible = re.sub(r"\s+", "", "".join(parser.parts))
+        if not visible:
+            continue
+        chinese_count = len(re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", visible))
+        if chinese_count / len(visible) > 0.3:
+            if visible not in chinese_lines:
+                chinese_lines.append(visible)
+        else:
+            english_lines.append(line.strip())
+
+    return english_lines, chinese_lines
 
 def decode_title_prefix(title):
     """Mirror of the footer prefix logic in fetchAndDisplay()."""

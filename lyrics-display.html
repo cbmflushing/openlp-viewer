@@ -34,6 +34,20 @@
             font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
         }
         
+        #fade-overlay {
+            position: fixed;
+            inset: 0;
+            background: black;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 999;
+            transition: opacity 0.3s ease;
+        }
+
+        #fade-overlay.dark {
+            opacity: 1;
+        }
+
         #content {
             text-align: center;
             padding: 30px 20px;
@@ -270,6 +284,7 @@
     </style>
 </head>
 <body>
+    <div id="fade-overlay" class="dark" aria-hidden="true"></div>
     <div id="content"></div>
     <div id="title-display"></div>
     <div id="error">Error fetching data</div>
@@ -455,8 +470,41 @@
             document.getElementById('modal-overlay').classList.remove('hidden');
         }
         
+        function parseSlideLines(text) {
+            const englishLines = [];
+            const chineseLines = new Set();
+            const decoder = document.createElement('div');
+            for (const line of text.replace(/<br\s*\/?>/gi, '\n').split('\n')) {
+                decoder.innerHTML = line;
+                const visible = decoder.textContent.replace(/\s+/g, '');
+                if (!visible) continue;
+                const characters = Array.from(visible);
+                const chineseCount = characters.filter(char =>
+                    /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u.test(char)
+                ).length;
+                if (chineseCount / characters.length > 0.3) {
+                    chineseLines.add(visible);
+                } else {
+                    englishLines.push(line.trim());
+                }
+            }
+            return { englishLines, chineseLines: Array.from(chineseLines) };
+        }
+
+        function setFadeState(empty) {
+            document.getElementById('fade-overlay').classList.toggle('dark', empty);
+        }
+
+        function clearSlide() {
+            document.getElementById('content').innerHTML = '';
+            document.getElementById('title-display').textContent = '';
+            document.getElementById('error').style.display = 'none';
+            updateFooter();
+            setFadeState(true);
+        }
+
         // Fetches the current live slide from OpenLP and updates the display.
-        // OpenLP wraps Chinese text in <span> tags; English is the remaining plain text.
+        // Classify visible characters, not formatting spans, to identify Chinese.
         // Song titles matching c### / h### / ch### are decoded as Chorus / Hymnary / Songbook.
         async function fetchAndDisplay() {
             try {
@@ -469,8 +517,8 @@
                 
                 const data = await response.json();
                 
-                if (!data.results || !data.results.slides) {
-                    document.getElementById('content').innerHTML = '';
+                if (!data.results || !Array.isArray(data.results.slides)) {
+                    clearSlide();
                     return;
                 }
                 
@@ -486,10 +534,11 @@
                     }
                 }
                 
-                if (!currentSlide || !currentSlide.text) {
-                    document.getElementById('content').innerHTML = '';
-                    document.getElementById('title-display').textContent = '';
-                    updateFooter();
+                const { englishLines, chineseLines } = parseSlideLines(
+                    currentSlide ? (currentSlide.html || currentSlide.text || '') : ''
+                );
+                if (!englishLines.length && !chineseLines.length) {
+                    clearSlide();
                     return;
                 }
                 
@@ -521,27 +570,6 @@
                 footerHtml += footerExtra;
                 document.getElementById('footer').innerHTML = footerHtml;
                 
-                let text = currentSlide.html || currentSlide.text;
-                
-                text = text.replace(/<br\s*\/?>/gi, '\n');
-                
-                // Chinese text arrives inside <span> tags; extract and deduplicate lines
-                let chineseLinesSet = new Set();
-                let chineseMatches = text.matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi);
-                for (const match of chineseMatches) {
-                    let chinesePart = match[1].trim();
-                    chinesePart.split('\n').forEach(l => {
-                        let cleaned = l.trim().replace(/\s+/g, '');
-                        if (cleaned) chineseLinesSet.add(cleaned);
-                    });
-                }
-                
-                // Strip span tags to leave only English text
-                let englishText = text.replace(/<span[^>]*>[\s\S]*?<\/span>/gi, '').trim();
-                let englishLines = englishText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                
-                let chineseLines = Array.from(chineseLinesSet);
-                
                 let htmlContent = '';
                 
                 for (const line of englishLines) {
@@ -564,6 +592,7 @@
                 
                 document.getElementById('content').innerHTML = htmlContent;
                 document.getElementById('error').style.display = 'none';
+                setFadeState(false);
                 
             } catch (error) {
                 console.error('Error:', error);
@@ -580,8 +609,15 @@
         
         loadSettings();
         
+        document.getElementById('modal-overlay').addEventListener('click', function(e) {
+            if (e.target === this) closeModal(false);
+        });
+
         let isHidden = false;
         document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !document.getElementById('modal-overlay').classList.contains('hidden')) {
+                closeModal(false);
+            }
             if (e.key === '.' && !e.target.matches('input')) {
                 isHidden = !isHidden;
                 document.body.classList.toggle('hidden-content', isHidden);
