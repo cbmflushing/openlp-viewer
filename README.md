@@ -8,12 +8,12 @@ A standalone browser page for displaying live OpenLP lyrics on a projector or se
 2. Open [`lyrics-display.html`](lyrics-display.html) in a browser.
 3. In the settings dialog, enter the **OpenLP Server IP** as a host and port, without `http://`:
    - Same computer as OpenLP: `localhost:4316`
-   - Another computer: for example, `192.168.1.160:4316`
+   - Another computer: for example, `192.168.1.212:4316`
 4. Choose the display language, colors, and fonts, optionally enable the song title, and enter the CCLI license number (`26557` for CBM Flushing).
 5. Click **Save & Start**.
 6. Send a song live in OpenLP. Move the browser to the display screen and use the browser's full-screen mode.
 
-The viewer checks for the selected live slide every second. Settings are saved in the current browser.
+The viewer refreshes immediately when OpenLP sends a WebSocket state notification, and also checks for the selected live slide every second as a fallback. Live-slide and port-discovery requests time out after five seconds, so stalled requests cannot block updates indefinitely. It discovers the WebSocket port from OpenLP's system API, defaulting to `4317` if discovery fails or times out, and reconnects automatically with bounded backoff. Settings are saved in the current browser.
 
 ## Controls
 
@@ -35,7 +35,8 @@ The viewer checks for the selected live slide every second. Settings are saved i
 - **No lyrics:** make sure a song slide is live and selected in OpenLP. An empty slide intentionally shows black. Also check whether local blackout (`.`) is enabled.
 - **Connection error:** check the host, port, remote API settings, network, and firewall. On another computer, `localhost` refers to that computer—not the OpenLP computer.
 - **Check the API:** open `http://HOST:4316/api/controller/live/text` in the browser, replacing `HOST` with the OpenLP computer's address. It should return JSON.
-- **Browser blocks requests:** check the browser console for CORS or mixed-content errors. The viewer uses an HTTP API; do not host the page over HTTPS without a suitable proxy.
+- **Push updates unavailable:** check that the discovered WebSocket port (normally `4317`) is reachable through the firewall. Polling continues every second if WebSockets or port discovery are unavailable; if discovery fails with a non-default WebSocket port, polling remains the fallback.
+- **Browser blocks requests:** check the browser console for CORS or mixed-content errors. The viewer uses HTTP and unencrypted WebSockets; an HTTPS-hosted page can block them. A suitable proxy and compatible deployment configuration are needed for HTTPS.
 
 Use only trusted OpenLP content: English slide formatting is rendered as HTML. Keep the remote API on a trusted network.
 
@@ -45,9 +46,10 @@ From this directory, run offline regression tests (requires Node.js):
 
 ```sh
 node test_viewer.cjs
+node test_websocket.cjs
 ```
 
-The integration script additionally requires Python 3 and a live OpenLP server at `http://192.168.1.160:4316`:
+The integration script additionally requires Python 3 and a live OpenLP server at `http://192.168.1.212:4316`:
 
 ```sh
 python3 test_integration.py

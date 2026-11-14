@@ -12,7 +12,7 @@ import sys
 import urllib.request
 import urllib.error
 
-SERVER = "http://192.168.1.160:4316"
+SERVER = "http://192.168.1.212:4316"
 LIVE_TEXT_URL = f"{SERVER}/api/controller/live/text"
 
 

@@ -1,7 +1,7 @@
 <!--
   CBM Lyrics Display
   Single-page display for projecting bilingual (English/Chinese) song lyrics during worship.
-  Polls the OpenLP REST API every second and renders the currently selected slide.
+  Refreshes on OpenLP state notifications and polls every second as a fallback.
   English lines are shown in white, Chinese lines in yellow, on a green background by default.
   All colors, fonts, server IP, and CCLI number are configurable via a settings modal and
   persisted in localStorage. Press '.' to toggle a blackout screen.
@@ -411,6 +411,7 @@
         }
         
         function saveSettings() {
+            const previousServer = settings.serverIp;
             settings.serverIp = document.getElementById('server-ip').value.trim() || 'localhost:4316';
             settings.displayLanguage = document.getElementById('display-language').value;
             settings.bgColor = document.getElementById('bg-color').value;
@@ -425,6 +426,7 @@
             
             localStorage.setItem('cbmDisplaySettings', JSON.stringify(settings));
             applySettings();
+            if (settings.serverIp !== previousServer) restartConnection();
         }
         
         function applySettings() {
@@ -464,6 +466,7 @@
             settings = { ...DEFAULT_SETTINGS };
             localStorage.removeItem('cbmDisplaySettings');
             applySettings();
+            restartConnection();
             showSettings();
         }
         
@@ -517,16 +520,36 @@
         // Fetches the current live slide from OpenLP and updates the display.
         // Classify visible characters, not formatting spans, to identify Chinese.
         // Song titles matching c### / h### / ch### are decoded as Chorus / Hymnary / Songbook.
+        let responseVersion = 0;
+        const requestTimeoutMs = 5000;
+
+        // Race the entire response, including JSON parsing: abort alone cannot
+        // guarantee a stalled request settles, especially on older browsers.
+        function requestJson(url) {
+            const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+            let cancel;
+            let timer;
+            const timeout = new Promise((resolve, reject) => {
+                cancel = () => {
+                    if (controller) controller.abort();
+                    reject(new Error('Request timed out or cancelled'));
+                };
+                timer = setTimeout(cancel, requestTimeoutMs);
+            });
+            const request = (async () => {
+                const response = await fetch(url, controller ? { signal: controller.signal } : undefined);
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })();
+            return { promise: Promise.race([request, timeout]).finally(() => clearTimeout(timer)), cancel };
+        }
+
         async function fetchAndDisplay() {
+            const version = ++responseVersion;
             try {
                 const url = `http://${settings.serverIp}/api/controller/live/text`;
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                
-                const data = await response.json();
+                const data = await requestJson(url).promise;
+                if (version !== responseVersion) return;
                 
                 if (!data.results || !Array.isArray(data.results.slides)) {
                     clearSlide();
@@ -607,6 +630,7 @@
                 setFadeState(false);
                 
             } catch (error) {
+                if (version !== responseVersion) return;
                 console.error('Error:', error);
                 document.getElementById('error').textContent = 'Error: ' + error.message;
                 document.getElementById('error').style.display = 'block';
@@ -619,6 +643,105 @@
             return div.innerHTML;
         }
         
+        // At most one refresh per connection generation; changes while it is in
+        // flight invalidate its result and schedule one final, up-to-date read.
+        let refreshState = { active: false, pending: false };
+        function requestRefresh(notification = true) {
+            const state = refreshState;
+            if (state.active) {
+                if (!notification) return;
+                state.pending = true;
+                ++responseVersion;
+                return;
+            }
+            state.active = true;
+            fetchAndDisplay().finally(() => {
+                state.active = false;
+                if (state === refreshState && state.pending) {
+                    state.pending = false;
+                    requestRefresh();
+                }
+            });
+        }
+
+        let connectionGeneration = 0;
+        let socket = null;
+        let discoveryRequest = null;
+        let reconnectTimer = null;
+        let reconnectDelay = 2000;
+
+        function restartConnection() {
+            const generation = ++connectionGeneration;
+            ++responseVersion;
+            refreshState = { active: false, pending: false };
+            if (discoveryRequest) discoveryRequest.cancel();
+            discoveryRequest = null;
+            if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+            if (socket) socket.close();
+            socket = null;
+            reconnectDelay = 2000;
+            requestRefresh();
+            if (typeof WebSocket !== 'undefined') discoverAndConnect(generation);
+        }
+
+        async function discoverAndConnect(generation) {
+            const server = settings.serverIp;
+            let port = 4317;
+            const request = requestJson(`http://${server}/api/v2/core/system`);
+            discoveryRequest = request;
+            try {
+                const system = await request.promise;
+                const discovered = Number(system.websocketPort || system.websocket_port);
+                if (Number.isInteger(discovered) && discovered > 0 && discovered <= 65535) port = discovered;
+            } catch (error) {
+                // Polling continues; try OpenLP's default WebSocket port.
+            }
+            if (discoveryRequest === request) discoveryRequest = null;
+            if (generation !== connectionGeneration) return;
+            let ws;
+            try {
+                const host = new URL(`http://${server}`).hostname;
+                ws = new WebSocket(`ws://${host}:${port}/`);
+                socket = ws;
+            } catch (error) {
+                scheduleReconnect(generation);
+                return;
+            }
+            const current = () => generation === connectionGeneration && socket === ws;
+            ws.addEventListener('open', () => {
+                if (!current()) return;
+                reconnectDelay = 2000;
+                requestRefresh();
+            });
+            ws.addEventListener('message', async event => {
+                if (!current()) return;
+                try {
+                    const payload = event.data instanceof Blob ? await event.data.text() : event.data;
+                    if (!current() || typeof payload !== 'string') return;
+                    const data = JSON.parse(payload);
+                    if (data && data.results && typeof data.results.item === 'string') requestRefresh();
+                } catch (error) { /* Ignore malformed and unrelated notifications. */ }
+            });
+            const disconnected = () => {
+                if (!current()) return;
+                socket = null;
+                ws.close();
+                scheduleReconnect(generation);
+            };
+            ws.addEventListener('error', disconnected);
+            ws.addEventListener('close', disconnected);
+        }
+
+        function scheduleReconnect(generation) {
+            if (generation !== connectionGeneration || reconnectTimer !== null) return;
+            reconnectTimer = setTimeout(() => {
+                reconnectTimer = null;
+                if (generation === connectionGeneration) discoverAndConnect(generation);
+            }, reconnectDelay);
+            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        }
+
         loadSettings();
         
         document.getElementById('modal-overlay').addEventListener('click', function(e) {
@@ -640,8 +763,8 @@
             document.getElementById('modal-overlay').classList.remove('hidden');
         }
         
-        fetchAndDisplay();
-        setInterval(fetchAndDisplay, 1000);
+        restartConnection();
+        setInterval(() => requestRefresh(false), 1000);
     </script>
 </body>
 </html>

@@ -61,7 +61,7 @@ const context = vm.createContext({
         setItem: (key, value) => { stored = value; },
         removeItem: () => { stored = null; }
     },
-    setInterval() {}, console: {error() {}},
+    setInterval() {}, setTimeout, clearTimeout, console: {error() {}},
     fetch: async () => {
         if (networkError) throw new Error('offline');
         return {ok: true, json: async () => payload};
