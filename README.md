@@ -43,6 +43,20 @@ The viewer refreshes immediately when OpenLP sends a WebSocket state notificatio
 
 Use only trusted OpenLP content: English slide formatting is rendered as HTML. Keep the remote API on a trusted network.
 
+## Live-update module
+
+`createLiveUpdate({ onData, onError })` lives inside `lyrics-display.html`, keeping the page standalone. Its public lifecycle is:
+
+- `start(server)` starts an immediate read, one-second fallback polling, and WebSocket discovery.
+- `switchServer(server)` replaces the active connection (also when the server is unchanged).
+- `stop()` invalidates outstanding work, closes the socket, and clears owned timers. It is safe to call repeatedly; `start` can restart it later.
+
+Both start methods replace any prior lifetime. Only current results reach `onData` (raw parsed JSON) or `onError` (live-slide request failures). Push notifications coalesce refreshes and supersede older results; polling does not invalidate slow valid reads. Requests, including JSON parsing, have five-second timeouts even without abort support. Discovery failures use port `4317`; reconnect delays grow from two to thirty seconds and reset after a successful open. Server changes and stop reject stale requests, errors, discovery, and delayed Blob notifications.
+
+The module owns connection state, not presentation. The viewer's `displayLiveData` interprets selected slides and controls lyrics, language, title/footer, fitting and fade; `displayLiveError` preserves the last display while reporting errors. Successful empty-slide responses still clear/fade the display. Settings saves and reset use the lifecycle rather than connection internals.
+
+Tests can supply limited `network` (`fetch`, `WebSocket`, `AbortController`, `Blob`, `URL`) and `clock` (`setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`) adapters. Each supplied adapter replaces its browser-default counterpart; no production dependency is required.
+
 ## Tests
 
 From this directory, run offline regression tests (requires Node.js):
@@ -50,6 +64,7 @@ From this directory, run offline regression tests (requires Node.js):
 ```sh
 node test_viewer.cjs
 node test_websocket.cjs
+node test_live_update.cjs
 ```
 
 Real-browser layout checks additionally require Google Chrome (or pass a Chromium executable path):

@@ -5,7 +5,7 @@
 - Act as an orchestrator: break requested work into a queue using the `to-tickets` skill, then delegate implementation to subagents.
 - Use local tickets under `.scratch/<feature-slug>/issues/`, one file per ticket, with explicit blocking dependencies and acceptance criteria.
 - Confirm the proposed breakdown before starting implementation. Work on tickets whose blockers are complete.
-- Default implementation subagents to **Terra**, with **high** reasoning, unless the user specifies otherwise. Use **Sol** subagents for difficult work.
+- Default implementation subagents to **Terra**, with **xhigh** reasoning, unless the user specifies otherwise. Use **Sol** subagents for difficult work.
 
 ## Test-driven development
 

@@ -628,7 +628,7 @@
             
             localStorage.setItem('cbmDisplaySettings', JSON.stringify(settings));
             applySettings();
-            if (settings.serverIp !== previousServer) restartConnection();
+            if (settings.serverIp !== previousServer) liveUpdate.switchServer(settings.serverIp);
         }
         
         function applySettings() {
@@ -717,7 +717,7 @@
             settings = { ...DEFAULT_SETTINGS };
             localStorage.removeItem('cbmDisplaySettings');
             applySettings();
-            restartConnection();
+            liveUpdate.switchServer(settings.serverIp);
             showSettings();
         }
         
@@ -771,40 +771,147 @@
             setFadeState(true);
         }
 
-        // Fetches the current live slide from OpenLP and updates the display.
-        // Classify visible characters, not formatting spans, to identify Chinese.
-        // Song titles matching c### / h### / ch### are decoded as Chorus / Hymnary / Songbook.
-        let responseVersion = 0;
-        const requestTimeoutMs = 5000;
+        // BEGIN live-update module
+        // The viewer can create a connection with browser defaults, or supply the
+        // small network/clock adapters for deterministic tests. Slide data is not interpreted here.
+        function createLiveUpdate({ onData, onError, network, clock }) {
+            network = network || {
+                fetch: (...args) => fetch(...args),
+                WebSocket: typeof WebSocket === 'undefined' ? undefined : WebSocket,
+                AbortController: typeof AbortController === 'undefined' ? undefined : AbortController,
+                Blob: typeof Blob === 'undefined' ? undefined : Blob,
+                URL
+            };
+            clock = clock || {
+                setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id),
+                setInterval: (fn, ms) => setInterval(fn, ms), clearInterval: id => clearInterval(id)
+            };
+            let connection = null;
 
-        // Race the entire response, including JSON parsing: abort alone cannot
-        // guarantee a stalled request settles, especially on older browsers.
-        function requestJson(url) {
-            const controller = typeof AbortController === 'undefined' ? null : new AbortController();
-            let cancel;
-            let timer;
-            const timeout = new Promise((resolve, reject) => {
-                cancel = () => {
-                    if (controller) controller.abort();
-                    reject(new Error('Request timed out or cancelled'));
-                };
-                timer = setTimeout(cancel, requestTimeoutMs);
-            });
-            const request = (async () => {
-                const response = await fetch(url, controller ? { signal: controller.signal } : undefined);
-                if (!response.ok) throw new Error('Network response was not ok');
-                return response.json();
-            })();
-            return { promise: Promise.race([request, timeout]).finally(() => clearTimeout(timer)), cancel };
+            function stop() {
+                const old = connection;
+                connection = null;
+                if (!old) return;
+                clock.clearInterval(old.pollTimer);
+                if (old.reconnectTimer !== null) clock.clearTimeout(old.reconnectTimer);
+                for (const cancel of old.requests) cancel();
+                if (old.socket) old.socket.close();
+            }
+
+            function start(server) {
+                stop();
+                const state = { server, requests: new Set(), socket: null, reconnectTimer: null,
+                    reconnectDelay: 2000, active: false, pending: false, version: 0, pollTimer: null };
+                connection = state;
+                const current = () => connection === state;
+
+                // Race fetch and JSON parsing; cancellation also clears the timer,
+                // even if the browser has no AbortController or ignores abort.
+                function requestJson(url) {
+                    const controller = network.AbortController ? new network.AbortController() : null;
+                    let timer, rejectCancellation;
+                    const cancellation = new Promise((resolve, reject) => { rejectCancellation = reject; });
+                    const cancel = () => {
+                        clock.clearTimeout(timer);
+                        state.requests.delete(cancel);
+                        if (controller) controller.abort();
+                        rejectCancellation(new Error('Request timed out or cancelled'));
+                    };
+                    state.requests.add(cancel);
+                    timer = clock.setTimeout(cancel, 5000);
+                    const request = (async () => {
+                        const response = await network.fetch(url, controller ? { signal: controller.signal } : undefined);
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })();
+                    return Promise.race([request, cancellation]).finally(() => {
+                        clock.clearTimeout(timer);
+                        state.requests.delete(cancel);
+                    });
+                }
+
+                function refresh(notification = true) {
+                    if (!current()) return;
+                    if (state.active) {
+                        if (notification) { state.pending = true; ++state.version; }
+                        return;
+                    }
+                    state.active = true;
+                    const version = ++state.version;
+                    requestJson(`http://${server}/api/controller/live/text`).then(
+                        data => { if (current() && version === state.version) onData(data); },
+                        error => { if (current() && version === state.version) onError(error); }
+                    ).finally(() => {
+                        state.active = false;
+                        if (current() && state.pending) {
+                            state.pending = false;
+                            refresh();
+                        }
+                    });
+                }
+
+                function scheduleReconnect() {
+                    if (!current() || state.reconnectTimer !== null) return;
+                    state.reconnectTimer = clock.setTimeout(() => {
+                        state.reconnectTimer = null;
+                        if (current()) discover();
+                    }, state.reconnectDelay);
+                    state.reconnectDelay = Math.min(state.reconnectDelay * 2, 30000);
+                }
+
+                async function discover() {
+                    let port = 4317;
+                    try {
+                        const system = await requestJson(`http://${server}/api/v2/core/system`);
+                        const discovered = Number(system.websocketPort || system.websocket_port);
+                        if (Number.isInteger(discovered) && discovered > 0 && discovered <= 65535) port = discovered;
+                    } catch (error) { /* Polling continues with the default port. */ }
+                    if (!current()) return;
+                    let ws;
+                    try {
+                        const host = new network.URL(`http://${server}`).hostname;
+                        ws = new network.WebSocket(`ws://${host}:${port}/`);
+                        state.socket = ws;
+                    } catch (error) {
+                        scheduleReconnect();
+                        return;
+                    }
+                    const socketCurrent = () => current() && state.socket === ws;
+                    ws.addEventListener('open', () => {
+                        if (!socketCurrent()) return;
+                        state.reconnectDelay = 2000;
+                        refresh();
+                    });
+                    ws.addEventListener('message', async event => {
+                        if (!socketCurrent()) return;
+                        try {
+                            const payload = network.Blob && event.data instanceof network.Blob ? await event.data.text() : event.data;
+                            if (!socketCurrent() || typeof payload !== 'string') return;
+                            const data = JSON.parse(payload);
+                            if (data && data.results && typeof data.results.item === 'string') refresh();
+                        } catch (error) { /* Ignore malformed and unrelated messages. */ }
+                    });
+                    const disconnected = () => {
+                        if (!socketCurrent()) return;
+                        state.socket = null;
+                        ws.close();
+                        scheduleReconnect();
+                    };
+                    ws.addEventListener('error', disconnected);
+                    ws.addEventListener('close', disconnected);
+                }
+
+                state.pollTimer = clock.setInterval(() => refresh(false), 1000);
+                refresh();
+                if (network.WebSocket) discover();
+            }
+            return { start, switchServer: start, stop };
         }
+        // END live-update module
 
-        async function fetchAndDisplay() {
-            const version = ++responseVersion;
+        // Interpret live slide data in the presentation layer.
+        function displayLiveData(data) {
             try {
-                const url = `http://${settings.serverIp}/api/controller/live/text`;
-                const data = await requestJson(url).promise;
-                if (version !== responseVersion) return;
-                
                 if (!data.results || !Array.isArray(data.results.slides)) {
                     clearSlide();
                     return;
@@ -894,117 +1001,23 @@
                 setFadeState(false);
                 
             } catch (error) {
-                if (version !== responseVersion) return;
-                console.error('Error:', error);
-                document.getElementById('error').textContent = 'Error: ' + error.message;
-                document.getElementById('error').style.display = 'block';
+                displayLiveError(error);
             }
         }
         
+        function displayLiveError(error) {
+            console.error('Error:', error);
+            document.getElementById('error').textContent = 'Error: ' + error.message;
+            document.getElementById('error').style.display = 'block';
+        }
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
         
-        // At most one refresh per connection generation; changes while it is in
-        // flight invalidate its result and schedule one final, up-to-date read.
-        let refreshState = { active: false, pending: false };
-        function requestRefresh(notification = true) {
-            const state = refreshState;
-            if (state.active) {
-                if (!notification) return;
-                state.pending = true;
-                ++responseVersion;
-                return;
-            }
-            state.active = true;
-            fetchAndDisplay().finally(() => {
-                state.active = false;
-                if (state === refreshState && state.pending) {
-                    state.pending = false;
-                    requestRefresh();
-                }
-            });
-        }
-
-        let connectionGeneration = 0;
-        let socket = null;
-        let discoveryRequest = null;
-        let reconnectTimer = null;
-        let reconnectDelay = 2000;
-
-        function restartConnection() {
-            const generation = ++connectionGeneration;
-            ++responseVersion;
-            refreshState = { active: false, pending: false };
-            if (discoveryRequest) discoveryRequest.cancel();
-            discoveryRequest = null;
-            if (reconnectTimer !== null) clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-            if (socket) socket.close();
-            socket = null;
-            reconnectDelay = 2000;
-            requestRefresh();
-            if (typeof WebSocket !== 'undefined') discoverAndConnect(generation);
-        }
-
-        async function discoverAndConnect(generation) {
-            const server = settings.serverIp;
-            let port = 4317;
-            const request = requestJson(`http://${server}/api/v2/core/system`);
-            discoveryRequest = request;
-            try {
-                const system = await request.promise;
-                const discovered = Number(system.websocketPort || system.websocket_port);
-                if (Number.isInteger(discovered) && discovered > 0 && discovered <= 65535) port = discovered;
-            } catch (error) {
-                // Polling continues; try OpenLP's default WebSocket port.
-            }
-            if (discoveryRequest === request) discoveryRequest = null;
-            if (generation !== connectionGeneration) return;
-            let ws;
-            try {
-                const host = new URL(`http://${server}`).hostname;
-                ws = new WebSocket(`ws://${host}:${port}/`);
-                socket = ws;
-            } catch (error) {
-                scheduleReconnect(generation);
-                return;
-            }
-            const current = () => generation === connectionGeneration && socket === ws;
-            ws.addEventListener('open', () => {
-                if (!current()) return;
-                reconnectDelay = 2000;
-                requestRefresh();
-            });
-            ws.addEventListener('message', async event => {
-                if (!current()) return;
-                try {
-                    const payload = event.data instanceof Blob ? await event.data.text() : event.data;
-                    if (!current() || typeof payload !== 'string') return;
-                    const data = JSON.parse(payload);
-                    if (data && data.results && typeof data.results.item === 'string') requestRefresh();
-                } catch (error) { /* Ignore malformed and unrelated notifications. */ }
-            });
-            const disconnected = () => {
-                if (!current()) return;
-                socket = null;
-                ws.close();
-                scheduleReconnect(generation);
-            };
-            ws.addEventListener('error', disconnected);
-            ws.addEventListener('close', disconnected);
-        }
-
-        function scheduleReconnect(generation) {
-            if (generation !== connectionGeneration || reconnectTimer !== null) return;
-            reconnectTimer = setTimeout(() => {
-                reconnectTimer = null;
-                if (generation === connectionGeneration) discoverAndConnect(generation);
-            }, reconnectDelay);
-            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
-        }
+        const liveUpdate = createLiveUpdate({ onData: displayLiveData, onError: displayLiveError });
 
         initColorEditors();
         loadSettings();
@@ -1036,8 +1049,7 @@
             document.getElementById('modal-overlay').classList.remove('hidden');
         }
         
-        restartConnection();
-        setInterval(() => requestRefresh(false), 1000);
+        liveUpdate.start(settings.serverIp);
     </script>
 </body>
 </html>

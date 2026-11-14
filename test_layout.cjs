@@ -9,13 +9,17 @@ const setup = `<script>
 let testSlide = '';
 window.fetch = async () => ({ok:true, json:async () => ({results:{slides:[{selected:true, text:testSlide, title:'c123'}]}})});
 window.WebSocket = undefined;
+const nativeInterval = window.setInterval;
+window.setInterval = (fn, ms) => { window.testPoll = fn; return nativeInterval(fn, ms); };
 localStorage.setItem('cbmDisplaySettings', JSON.stringify({firstRun:false, showTitle:true}));
 </script>`;
 const checks = `<script>
 (async () => {
  const check = (ok, message) => { if (!ok) throw Error(message); };
  const content = document.getElementById('content');
- async function show(text) { testSlide=text; await fetchAndDisplay(); }
+ async function flush() { for (let i=0; i<20; i++) await Promise.resolve(); }
+ async function refresh() { await flush(); testPoll(); await flush(); }
+ async function show(text) { testSlide=text; await refresh(); }
  function verify(label) {
    const c=content.getBoundingClientRect(), title=document.getElementById('title-display').getBoundingClientRect(), footer=document.getElementById('footer').getBoundingClientRect();
    const lines=[...content.querySelectorAll('p')];
@@ -24,7 +28,7 @@ const checks = `<script>
      const r=p.getBoundingClientRect();
      check(r.left>=19 && r.right<=innerWidth-19, label+': width '+JSON.stringify(r.toJSON()));
      check(r.top>=title.bottom && r.bottom<=footer.top, label+': height');
-     check(p.scrollWidth<=p.clientWidth+1, label+': wrapping/overflow');
+     check(p.scrollWidth<=p.clientWidth+1, label+': wrapping/overflow '+p.scrollWidth+'/'+p.clientWidth+' font '+getComputedStyle(p).fontSize+' window '+innerWidth);
    }
    check(document.documentElement.scrollHeight<=innerHeight, label+': scrollbar');
    const en=content.querySelector('.english'), zh=content.querySelector('.chinese');
@@ -49,7 +53,7 @@ const checks = `<script>
  const before=content.innerHTML, size=verify('repeat');
  let mutations=0; const observer=new MutationObserver(records=>{ mutations+=records.length; });
  observer.observe(content,{childList:true,attributes:true,subtree:true});
- await fetchAndDisplay(); await Promise.resolve(); observer.disconnect();
+ await refresh(); await Promise.resolve(); observer.disconnect();
  check(content.innerHTML===before && verify('unchanged')===size && mutations===0, 'stable refresh without mutations');
  frameElement.style.width='500px'; frameElement.style.height='400px';
  await new Promise(resolve=>setTimeout(resolve,100));
@@ -60,7 +64,7 @@ const checks = `<script>
  window.dispatchEvent(new Event('resize'));
  document.dispatchEvent(new KeyboardEvent('keydown', {key:'.', bubbles:true}));
  verify('blackout restored');
- settings.displayLanguage='english'; await fetchAndDisplay();
+ settings.displayLanguage='english'; await refresh();
  check(!content.querySelector('.chinese'), 'English only'); verify('English only');
  settings.autoFit=false; applySettings();
  check(Math.abs(parseFloat(getComputedStyle(content.querySelector('p')).fontSize)-Math.max(20,Math.min(innerWidth*.04,56)))<0.1, 'disabled clamp');

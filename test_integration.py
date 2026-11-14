@@ -78,7 +78,7 @@ def escape_html(text):
 
 def parse_slide(slide):
     """
-    Mirror of the fetchAndDisplay() parsing block.
+    Mirror of the displayLiveData() parsing block.
     Returns (english_lines, chinese_lines, footer_extra).
     """
     text = slide.get("html") or slide.get("text", "")
@@ -110,7 +110,7 @@ def parse_slide(slide):
     return english_lines, chinese_lines
 
 def decode_title_prefix(title):
-    """Mirror of the footer prefix logic in fetchAndDisplay()."""
+    """Mirror of the footer prefix logic in displayLiveData()."""
     m = re.match(r"^([a-z]+)(\d+)", title.lower().strip())
     if not m:
         return ""

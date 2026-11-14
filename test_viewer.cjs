@@ -51,6 +51,8 @@ const handlers = {};
 let payload = {results: {slides: []}};
 let networkError = false;
 let stored = null;
+let poll;
+const tick = () => new Promise(resolve => setImmediate(resolve));
 const context = vm.createContext({
     document: {
         body: new Element(), createElement: () => new Element(), getElementById: get,
@@ -61,7 +63,7 @@ const context = vm.createContext({
         setItem: (key, value) => { stored = value; },
         removeItem: () => { stored = null; }
     },
-    setInterval() {}, setTimeout, clearTimeout, console: {error() {}},
+    setInterval(fn) { poll = fn; return 1; }, clearInterval() {}, setTimeout, clearTimeout, URL, console: {error() {}},
     fetch: async () => {
         if (networkError) throw new Error('offline');
         return {ok: true, json: async () => payload};
@@ -72,7 +74,8 @@ vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
 const parse = text => JSON.parse(JSON.stringify(context.parseSlideLines(text)));
 const dark = () => get('fade-overlay').classList.contains('dark');
 const slide = fields => ({results: {slides: [{selected: true, ...fields}]}});
-async function display(value) { payload = value; await context.fetchAndDisplay(); }
+async function refresh() { await tick(); poll(); await tick(); }
+async function display(value) { payload = value; await refresh(); }
 
 (async () => {
     // Let the initial fetch finish before issuing test responses.
@@ -114,14 +117,24 @@ async function display(value) { payload = value; await context.fetchAndDisplay()
     assert.match(get('content').innerHTML, /class="chinese">奇異恩典/);
     const previous = get('content').innerHTML;
     networkError = true;
-    await context.fetchAndDisplay();
+    await refresh();
     assert.equal(dark(), false);
     assert.equal(get('content').innerHTML, previous);
+    assert.equal(get('error').style.display, 'block');
+    assert.match(get('error').textContent, /offline/);
     networkError = false;
     await display(slide({text: ''}));
     networkError = true;
-    await context.fetchAndDisplay();
+    await refresh();
     assert.equal(dark(), true);
+    assert.match(get('error').textContent, /offline/);
+    networkError = false;
+    // Malformed presentation data must still reach the existing error display.
+    await display(slide({text: {invalid: true}}));
+    assert.equal(get('error').style.display, 'block');
+    assert.match(get('error').textContent, /replace/);
+    await display(slide({text: 'Recovered'}));
+    assert.equal(get('error').style.display, 'none');
 
     handlers.keydown({key: '.', target: {matches: () => false}});
     assert.equal(context.document.body.classList.contains('hidden-content'), true);
@@ -202,7 +215,7 @@ async function display(value) { payload = value; await context.fetchAndDisplay()
     language.value = 'english';
     context.closeModal(true);
     assert.equal(JSON.parse(stored).displayLanguage, 'english');
-    await context.fetchAndDisplay();
+    await refresh();
     assert.equal(get('content').innerHTML,
         '<p class="english"><em>First</em></p><p class="english">Second<sup>2</sup></p>');
     assert.match(get('footer').innerHTML, /Chorus #123/);
@@ -212,7 +225,7 @@ async function display(value) { payload = value; await context.fetchAndDisplay()
     for (const dismiss of [() => context.closeModal(false), () => key('Escape'), () => overlay.click()]) {
         language.value = 'bilingual';
         dismiss();
-        await context.fetchAndDisplay();
+        await refresh();
         assert.doesNotMatch(get('content').innerHTML, /class="chinese"/);
         context.showSettings();
         assert.equal(language.value, 'english');
@@ -223,6 +236,7 @@ async function display(value) { payload = value; await context.fetchAndDisplay()
     assert.equal(get('title-display').textContent, '');
     assert.doesNotMatch(get('footer').innerHTML, /Chorus/);
     context.resetSettings();
+    await tick();
     assert.equal(autoFit.checked, true, 'reset enables auto-fit');
     assert.equal(language.value, 'bilingual');
     await display(slide({text: '奇異恩典'}));
