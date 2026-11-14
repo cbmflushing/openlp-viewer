@@ -230,6 +230,28 @@
             cursor: pointer;
         }
         
+        .color-row { flex-direction: column; gap: 0 !important; }
+        .color-setting { min-width: 0; position: relative; display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: start; }
+        .color-setting > label { margin: 6px 0 0; }
+        .color-swatches { display: flex; flex-wrap: wrap; gap: 3px; padding-right: 72px; }
+        .color-setting details { grid-column: 1 / -1; }
+        .color-setting summary { position: absolute; right: 0; top: 0; }
+        .color-current { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        .color-swatch { width: 22px; height: 24px; border: 1px solid #999; border-radius: 5px; cursor: pointer; padding: 0; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+        .color-swatch[aria-pressed="true"]::after { content: "✓"; font-weight: bold; font-size: 18px; }
+        #modal :focus-visible { outline: 3px solid #a5b4fc; outline-offset: 2px; }
+        .color-current, .color-error { font-size: 12px; margin: 6px 0; overflow-wrap: anywhere; }
+        .color-error { color: #ff9b9b; }
+        .color-setting summary { cursor: pointer; font-size: 12px; margin: 5px 0; }
+        .color-setting details label { margin-top: 8px; }
+        .color-setting .color-rgb-row { display: flex; gap: 5px; }
+        .color-setting .color-rgb-row label { flex: 1; min-width: 0; }
+        .color-setting input[aria-invalid="true"] { border: 2px solid #ff7777; }
+        @media (max-width: 480px) {
+            .color-swatches { padding-right: 0; }
+            .color-setting summary { position: static; }
+        }
+
         .form-row {
             display: flex;
             gap: 15px;
@@ -325,25 +347,113 @@
                 </select>
             </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Background Color</label>
-                    <input type="color" id="bg-color" value="#006400">
+            <div class="form-row color-row">
+                <div class="form-group color-setting" data-color-id="bg-color">
+                    <label>Background</label>
+                    <div class="color-swatches" role="group" aria-label="Background color presets">
+                        <button type="button" class="color-swatch" data-color="#1e1e1e" style="background:#1e1e1e" aria-label="Background preset #1e1e1e" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#ffffff" style="background:#ffffff" aria-label="Background preset #ffffff" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#e03131" style="background:#e03131" aria-label="Background preset #e03131" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#f08c00" style="background:#f08c00" aria-label="Background preset #f08c00" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#ffff00" style="background:#ffff00" aria-label="Background preset #ffff00" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#006400" style="background:#006400" aria-label="Background preset #006400" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#2f9e44" style="background:#2f9e44" aria-label="Background preset #2f9e44" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#1971c2" style="background:#1971c2" aria-label="Background preset #1971c2" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#9c36b5" style="background:#9c36b5" aria-label="Background preset #9c36b5" aria-pressed="false"></button>
+                    </div>
+                    <div class="color-current" aria-live="polite"></div>
+                    <details><summary aria-label="Advanced Background color">Advanced</summary>
+                        <label for="bg-color">Custom color picker</label>
+                        <input type="color" id="bg-color" value="#006400">
+                        <label>HEX<input class="color-hex" type="text" aria-label="Background HEX" autocomplete="off" spellcheck="false"></label>
+                        <div class="color-rgb-row">
+                            <label>Red<input class="color-rgb" type="text" inputmode="numeric" aria-label="Background Red" autocomplete="off"></label>
+                            <label>Green<input class="color-rgb" type="text" inputmode="numeric" aria-label="Background Green" autocomplete="off"></label>
+                            <label>Blue<input class="color-rgb" type="text" inputmode="numeric" aria-label="Background Blue" autocomplete="off"></label>
+                        </div>
+                        <div class="color-error" role="alert" hidden></div>
+                    </details>
                 </div>
-                <div class="form-group">
-                    <label>English Color</label>
-                    <input type="color" id="english-color" value="#ffffff">
+                <div class="form-group color-setting" data-color-id="english-color">
+                    <label>English</label>
+                    <div class="color-swatches" role="group" aria-label="English color presets">
+                        <button type="button" class="color-swatch" data-color="#1e1e1e" style="background:#1e1e1e" aria-label="English preset #1e1e1e" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#ffffff" style="background:#ffffff" aria-label="English preset #ffffff" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#e03131" style="background:#e03131" aria-label="English preset #e03131" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#f08c00" style="background:#f08c00" aria-label="English preset #f08c00" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#ffff00" style="background:#ffff00" aria-label="English preset #ffff00" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#006400" style="background:#006400" aria-label="English preset #006400" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#2f9e44" style="background:#2f9e44" aria-label="English preset #2f9e44" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#1971c2" style="background:#1971c2" aria-label="English preset #1971c2" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#9c36b5" style="background:#9c36b5" aria-label="English preset #9c36b5" aria-pressed="false"></button>
+                    </div>
+                    <div class="color-current" aria-live="polite"></div>
+                    <details><summary aria-label="Advanced English color">Advanced</summary>
+                        <label for="english-color">Custom color picker</label>
+                        <input type="color" id="english-color" value="#ffffff">
+                        <label>HEX<input class="color-hex" type="text" aria-label="English HEX" autocomplete="off" spellcheck="false"></label>
+                        <div class="color-rgb-row">
+                            <label>Red<input class="color-rgb" type="text" inputmode="numeric" aria-label="English Red" autocomplete="off"></label>
+                            <label>Green<input class="color-rgb" type="text" inputmode="numeric" aria-label="English Green" autocomplete="off"></label>
+                            <label>Blue<input class="color-rgb" type="text" inputmode="numeric" aria-label="English Blue" autocomplete="off"></label>
+                        </div>
+                        <div class="color-error" role="alert" hidden></div>
+                    </details>
                 </div>
             </div>
             
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Chinese Color</label>
-                    <input type="color" id="chinese-color" value="#ffff00">
+            <div class="form-row color-row">
+                <div class="form-group color-setting" data-color-id="chinese-color">
+                    <label>Chinese</label>
+                    <div class="color-swatches" role="group" aria-label="Chinese color presets">
+                        <button type="button" class="color-swatch" data-color="#1e1e1e" style="background:#1e1e1e" aria-label="Chinese preset #1e1e1e" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#ffffff" style="background:#ffffff" aria-label="Chinese preset #ffffff" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#e03131" style="background:#e03131" aria-label="Chinese preset #e03131" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#f08c00" style="background:#f08c00" aria-label="Chinese preset #f08c00" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#ffff00" style="background:#ffff00" aria-label="Chinese preset #ffff00" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#006400" style="background:#006400" aria-label="Chinese preset #006400" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#2f9e44" style="background:#2f9e44" aria-label="Chinese preset #2f9e44" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#1971c2" style="background:#1971c2" aria-label="Chinese preset #1971c2" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#9c36b5" style="background:#9c36b5" aria-label="Chinese preset #9c36b5" aria-pressed="false"></button>
+                    </div>
+                    <div class="color-current" aria-live="polite"></div>
+                    <details><summary aria-label="Advanced Chinese color">Advanced</summary>
+                        <label for="chinese-color">Custom color picker</label>
+                        <input type="color" id="chinese-color" value="#ffff00">
+                        <label>HEX<input class="color-hex" type="text" aria-label="Chinese HEX" autocomplete="off" spellcheck="false"></label>
+                        <div class="color-rgb-row">
+                            <label>Red<input class="color-rgb" type="text" inputmode="numeric" aria-label="Chinese Red" autocomplete="off"></label>
+                            <label>Green<input class="color-rgb" type="text" inputmode="numeric" aria-label="Chinese Green" autocomplete="off"></label>
+                            <label>Blue<input class="color-rgb" type="text" inputmode="numeric" aria-label="Chinese Blue" autocomplete="off"></label>
+                        </div>
+                        <div class="color-error" role="alert" hidden></div>
+                    </details>
                 </div>
-                <div class="form-group">
-                    <label>Footer Color</label>
-                    <input type="color" id="footer-color" value="#ffffff">
+                <div class="form-group color-setting" data-color-id="footer-color">
+                    <label>Footer</label>
+                    <div class="color-swatches" role="group" aria-label="Footer color presets">
+                        <button type="button" class="color-swatch" data-color="#1e1e1e" style="background:#1e1e1e" aria-label="Footer preset #1e1e1e" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#ffffff" style="background:#ffffff" aria-label="Footer preset #ffffff" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#e03131" style="background:#e03131" aria-label="Footer preset #e03131" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#f08c00" style="background:#f08c00" aria-label="Footer preset #f08c00" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#ffff00" style="background:#ffff00" aria-label="Footer preset #ffff00" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#006400" style="background:#006400" aria-label="Footer preset #006400" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#2f9e44" style="background:#2f9e44" aria-label="Footer preset #2f9e44" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#1971c2" style="background:#1971c2" aria-label="Footer preset #1971c2" aria-pressed="false"></button>
+                        <button type="button" class="color-swatch" data-color="#9c36b5" style="background:#9c36b5" aria-label="Footer preset #9c36b5" aria-pressed="false"></button>
+                    </div>
+                    <div class="color-current" aria-live="polite"></div>
+                    <details><summary aria-label="Advanced Footer color">Advanced</summary>
+                        <label for="footer-color">Custom color picker</label>
+                        <input type="color" id="footer-color" value="#ffffff">
+                        <label>HEX<input class="color-hex" type="text" aria-label="Footer HEX" autocomplete="off" spellcheck="false"></label>
+                        <div class="color-rgb-row">
+                            <label>Red<input class="color-rgb" type="text" inputmode="numeric" aria-label="Footer Red" autocomplete="off"></label>
+                            <label>Green<input class="color-rgb" type="text" inputmode="numeric" aria-label="Footer Green" autocomplete="off"></label>
+                            <label>Blue<input class="color-rgb" type="text" inputmode="numeric" aria-label="Footer Blue" autocomplete="off"></label>
+                        </div>
+                        <div class="color-error" role="alert" hidden></div>
+                    </details>
                 </div>
             </div>
             
@@ -421,6 +531,74 @@
         
         let settings = { ...DEFAULT_SETTINGS };
         
+        // Each editor keeps the native picker as the canonical valid draft value.
+        // Invalid text remains visible and blocks Save until corrected or discarded.
+        function colorEditors() {
+            return document.querySelectorAll ? document.querySelectorAll('.color-setting') : [];
+        }
+        function syncColorEditor(root) {
+            const picker = root.querySelector('input[type="color"]');
+            const value = picker.value.toLowerCase();
+            root.querySelector('.color-hex').value = value;
+            root.querySelectorAll('.color-rgb').forEach((input, i) => {
+                input.value = parseInt(value.slice(1 + i * 2, 3 + i * 2), 16);
+            });
+            root.querySelectorAll('.color-swatch').forEach(button => {
+                button.setAttribute('aria-pressed', String(button.dataset.color === value));
+            });
+            root.querySelector('.color-current').textContent = 'Selected: ' + value;
+            root.querySelectorAll('[aria-invalid]').forEach(input => input.removeAttribute('aria-invalid'));
+            root.querySelector('.color-error').hidden = true;
+        }
+        function markColorError(root, inputs, message) {
+            inputs.forEach(input => input.setAttribute('aria-invalid', 'true'));
+            const error = root.querySelector('.color-error');
+            error.textContent = message;
+            error.hidden = false;
+        }
+        function initColorEditors() {
+            colorEditors().forEach(root => {
+                const picker = root.querySelector('input[type="color"]');
+                const hex = root.querySelector('.color-hex');
+                const rgb = [...root.querySelectorAll('.color-rgb')];
+                root.querySelectorAll('.color-swatch').forEach(button => button.addEventListener('click', () => {
+                    picker.value = button.dataset.color;
+                    syncColorEditor(root);
+                }));
+                picker.addEventListener('input', () => syncColorEditor(root));
+                hex.addEventListener('input', () => {
+                    if (!/^#[0-9a-f]{6}$/i.test(hex.value)) {
+                        markColorError(root, [hex], 'Enter a HEX color as # followed by six hexadecimal digits.');
+                        return;
+                    }
+                    picker.value = hex.value;
+                    syncColorEditor(root);
+                });
+                rgb.forEach(input => input.addEventListener('input', () => {
+                    const invalid = rgb.filter(field => !/^\d{1,3}$/.test(field.value) || Number(field.value) > 255);
+                    rgb.forEach(field => field.removeAttribute('aria-invalid'));
+                    if (invalid.length) {
+                        markColorError(root, invalid, 'Enter whole RGB values from 0 to 255.');
+                        return;
+                    }
+                    picker.value = '#' + rgb.map(field => Number(field.value).toString(16).padStart(2, '0')).join('');
+                    syncColorEditor(root);
+                }));
+                syncColorEditor(root);
+            });
+        }
+        function validColorEditors() {
+            for (const root of colorEditors()) {
+                const invalid = root.querySelector('[aria-invalid="true"]');
+                if (invalid) {
+                    root.querySelector('details').open = true;
+                    invalid.focus();
+                    return false;
+                }
+            }
+            return true;
+        }
+
         function loadSettings() {
             const saved = localStorage.getItem('cbmDisplaySettings');
             if (saved) {
@@ -467,6 +645,7 @@
             document.getElementById('english-color').value = settings.englishColor;
             document.getElementById('chinese-color').value = settings.chineseColor;
             document.getElementById('footer-color').value = settings.footerColor;
+            colorEditors().forEach(syncColorEditor);
             document.getElementById('english-font').value = settings.englishFont;
             document.getElementById('chinese-font').value = settings.chineseFont;
             document.getElementById('show-title').checked = settings.showTitle;
@@ -543,6 +722,7 @@
         }
         
         function closeModal(save) {
+            if (save && !validColorEditors()) return;
             document.getElementById('modal-overlay').classList.add('hidden');
             settings.firstRun = false;
             localStorage.setItem('cbmDisplaySettings', JSON.stringify(settings));
@@ -826,6 +1006,7 @@
             reconnectDelay = Math.min(reconnectDelay * 2, 30000);
         }
 
+        initColorEditors();
         loadSettings();
         if (typeof window !== 'undefined') {
             window.addEventListener('resize', fitLyrics);

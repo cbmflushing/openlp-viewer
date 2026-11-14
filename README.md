@@ -19,6 +19,7 @@ The viewer refreshes immediately when OpenLP sends a WebSocket state notificatio
 
 - **Settings button:** reopen settings to change the server, display language, appearance, title, or CCLI number. Save to apply changes; Skip, Escape, or clicking outside the dialog discards unsaved changes.
 - **`.` (period):** toggle local blackout. This affects only this viewer, not OpenLP or other displays.
+- **Colors:** choose a preset swatch for the background, English, Chinese, or footer. The selected HEX value appears beneath each palette, including for custom colors. Expand **Advanced** to use the custom picker, enter a six-digit HEX value (for example, `#12ab34`), or edit the red, green, and blue channels (whole numbers from 0 to 255). Invalid or incomplete values are highlighted and must be corrected before saving; choosing a preset or picker color also replaces them.
 - **Reset:** restore the default settings.
 
 ## Display behavior
@@ -56,6 +57,8 @@ Real-browser layout checks additionally require Google Chrome (or pass a Chromiu
 ```sh
 node test_layout.cjs
 node test_layout.cjs /path/to/chromium
+node test_colors.cjs
+node test_colors.cjs /path/to/chromium
 ```
 
 The integration script additionally requires Python 3 and a live OpenLP server at `http://192.168.1.212:4316`:
