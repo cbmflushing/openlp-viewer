@@ -24,6 +24,8 @@ The viewer refreshes immediately when OpenLP sends a WebSocket state notificatio
 ## Display behavior
 
 - The default display language is **English + Chinese**; **English only** hides lines classified as Chinese. The saved choice persists in the browser, and Reset restores bilingual display.
+- **Automatically fit lyrics to screen** is on by default, including for existing settings. It scales both languages together to fit the available width and height, keeping the original line breaks and reserving space for the title and footer. Turn it off and save to restore the original responsive font sizes; Reset turns it back on. The fit is found within 0.05 CSS pixels of the measured maximum.
+- Extremely small windows, exceptionally long lines, many lines, or oversized title/footer text may leave too little room for legible lyrics, or even for the fixed margins and title/footer themselves. Use a larger display or shorten the slide/title; browser font rendering and trusted slide formatting can also affect the result.
 - English lines appear first, followed by Chinese lines when enabled.
 - Chinese is detected from the text itself, not HTML formatting: a line is Chinese when more than 30% of its non-whitespace characters are Chinese characters.
 - Chinese lines have whitespace removed and duplicates collapsed. Keep English and Chinese on separate lines; mixed-language lines are classified as a whole.
@@ -47,6 +49,13 @@ From this directory, run offline regression tests (requires Node.js):
 ```sh
 node test_viewer.cjs
 node test_websocket.cjs
+```
+
+Real-browser layout checks additionally require Google Chrome (or pass a Chromium executable path):
+
+```sh
+node test_layout.cjs
+node test_layout.cjs /path/to/chromium
 ```
 
 The integration script additionally requires Python 3 and a live OpenLP server at `http://192.168.1.212:4316`:

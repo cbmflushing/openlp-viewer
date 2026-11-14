@@ -13,7 +13,7 @@ function decode(text) {
 }
 class Element {
     constructor() {
-        this.style = {setProperty() {}};
+        this.style = {setProperty() {}, removeProperty() {}};
         this.handlers = {};
         this.classes = new Set();
         this.classList = {
@@ -178,6 +178,18 @@ async function display(value) { payload = value; await context.fetchAndDisplay()
     context.loadSettings();
     const language = get('display-language');
     assert.equal(language.value, 'bilingual');
+    const autoFit = get('auto-fit');
+    assert.equal(autoFit.checked, true, 'legacy settings enable auto-fit');
+    context.showSettings();
+    autoFit.checked = false;
+    context.closeModal(false);
+    context.showSettings();
+    assert.equal(autoFit.checked, true, 'dismissal discards auto-fit draft');
+    autoFit.checked = false;
+    context.closeModal(true);
+    assert.equal(JSON.parse(stored).autoFit, false, 'auto-fit is persisted');
+    context.loadSettings();
+    assert.equal(autoFit.checked, false, 'saved preference is restored');
     const languageSelect = html.match(/<select id="display-language">([\s\S]*?)<\/select>/);
     assert.ok(languageSelect, 'settings expose a display-language selector');
     assert.deepEqual([...languageSelect[1].matchAll(/<option value="([^"]+)"/g)].map(m => m[1]),
@@ -211,6 +223,7 @@ async function display(value) { payload = value; await context.fetchAndDisplay()
     assert.equal(get('title-display').textContent, '');
     assert.doesNotMatch(get('footer').innerHTML, /Chorus/);
     context.resetSettings();
+    assert.equal(autoFit.checked, true, 'reset enables auto-fit');
     assert.equal(language.value, 'bilingual');
     await display(slide({text: '奇異恩典'}));
     assert.match(get('content').innerHTML, /class="chinese">奇異恩典/);
