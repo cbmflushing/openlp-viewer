@@ -125,6 +125,55 @@
             text-align: center;
         }
         
+        #connection-help,
+        #settings-connection-help {
+            border: 2px solid #39343b;
+            border-radius: 16px 12px 17px 11px;
+            background: #faf7ef;
+            color: #302d35;
+            box-shadow: 5px 5px 0 #39343b;
+            line-height: 1.5;
+        }
+        #connection-help {
+            position: fixed;
+            z-index: 1000;
+            max-width: min(90vw, 560px);
+            padding: 24px;
+            text-align: center;
+        }
+        #connection-help button {
+            margin-top: 16px;
+            min-height: 44px;
+            padding: 10px 16px;
+            border: 2px solid #39343b;
+            border-radius: 8px 6px 9px 5px;
+            background: #d8d0ed;
+            color: #302d35;
+            box-shadow: 2px 2px 0 #39343b;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        #connection-help button:hover { background: #c6bae4; }
+        #connection-help button:focus-visible { outline: 3px solid #6554a4; outline-offset: 3px; }
+        #connection-help button:active { box-shadow: 1px 1px 0 #39343b; transform: translate(1px, 1px); }
+        #settings-connection-help { padding: 12px; }
+
+        #fullscreen-reminder {
+            position: fixed;
+            right: 12px;
+            bottom: 65px;
+            z-index: 1000;
+            max-width: min(60vw, 360px);
+            padding: 4px 8px;
+            border: 2px solid #39343b;
+            border-radius: 8px 6px 9px 5px;
+            background: #faf7ef;
+            color: #302d35;
+            box-shadow: 2px 2px 0 #39343b;
+            font: 14px/1.3 system-ui, sans-serif;
+            pointer-events: none;
+        }
+
         #settings-btn {
             position: fixed;
             z-index: 1000;
@@ -345,6 +394,7 @@
             font-family: "Comic Sans MS", "Chalkboard SE", "Bradley Hand", cursive;
         }
         #modal #viewer-version { color: #625b66; font-family: "Segoe UI", Arial, sans-serif; }
+        #viewer-update-link { color: #433080; font: normal 12px "Segoe UI", Arial, sans-serif; }
         #modal .form-group label { color: #49434b; font-weight: 600; }
         #modal .form-group select,
         #modal .form-group input[type="text"],
@@ -409,7 +459,9 @@
         body.hidden-content #content,
         body.hidden-content #title-display,
         body.hidden-content #footer,
-        body.hidden-content #error {
+        body.hidden-content #error,
+        body.hidden-content #connection-help,
+        body.hidden-content #fullscreen-reminder {
             display: none !important;
         }
         
@@ -424,14 +476,21 @@
     <div id="content"></div>
     <div id="title-display"></div>
     <div id="error">Error fetching data</div>
+    <div id="fullscreen-reminder" class="hidden" role="status">Use your browser's full-screen control for projection. Keep this viewer visible in its own window. Background tabs may stop updating.</div>
+    <div id="connection-help" class="hidden" role="status">
+        <p>Check that OpenLP is running, its remote server is enabled, and the server address in Settings is correct.</p>
+        <button type="button" onclick="showSettings()">Open Settings</button>
+    </div>
     <div id="footer">CBM Flushing</div>
     <button id="settings-btn" aria-label="Settings" onclick="showSettings()">&#8942;&#8942;&#8942;</button>
     
     <div id="modal-overlay" class="hidden">
         <div id="modal">
-            <h2>CBM Lyrics Display <small id="viewer-version"></small></h2>
+            <h2>CBM Lyrics Display <small id="viewer-version"></small> <a id="viewer-update-link" href="https://github.com/cbmflushing/openlp-viewer" target="_blank" rel="noopener noreferrer">Get the latest version</a></h2>
             <p>This display fetches lyrics from OpenLP and shows them with English in white and Chinese in yellow on a green background.</p>
+            <p>Keep this viewer visible in its own window. Background tabs may stop updating.</p>
             <p>Configure the OpenLP server IP and customize colors below:</p>
+            <p id="settings-connection-help" class="hidden" role="status">Check that OpenLP is running, its remote server is enabled, and the server address in Settings is correct.</p>
             
             <div class="form-group">
                 <label>OpenLP Server IP</label>
@@ -612,7 +671,7 @@
     </div>
 
     <script>
-        const VIEWER_VERSION = '1.1.0';
+        const VIEWER_VERSION = '1.2.0';
         document.getElementById('viewer-version').textContent = 'v' + VIEWER_VERSION;
 
         // Fallback values used on first run or if localStorage is corrupt
@@ -730,7 +789,7 @@
             
             localStorage.setItem('cbmDisplaySettings', JSON.stringify(settings));
             applySettings();
-            if (settings.serverIp !== previousServer) liveUpdate.switchServer(settings.serverIp);
+            if (settings.serverIp !== previousServer) startLiveConnection(settings.serverIp);
         }
         
         function applySettings() {
@@ -760,11 +819,21 @@
             fitLyrics();
         }
 
+        // Keep the startup notice above the footer and outside the fitted lyric area.
+        function lyricsAvailableBottom() {
+            const footerTop = document.getElementById('footer').getBoundingClientRect().top;
+            const reminder = document.getElementById('fullscreen-reminder');
+            if (reminder.classList.contains('hidden')) return footerTop - 15;
+            reminder.style.bottom = Math.max(8, window.innerHeight - footerTop + 8) + 'px';
+            return Math.min(footerTop - 15, reminder.getBoundingClientRect().top - 8);
+        }
+
         // Measure an invisible, unwrapped clone before the browser paints. A binary
         // search handles fixed letter spacing and superscripts as well as font metrics.
         function fitLyrics() {
             const content = document.getElementById('content');
             document.body.classList.toggle('auto-fit', settings.autoFit);
+            if (typeof window !== 'undefined' && !document.body.classList.contains('hidden-content')) lyricsAvailableBottom();
             if (!settings.autoFit) {
                 content.style.top = content.style.height = '';
                 content.style.removeProperty('--fit-english');
@@ -774,9 +843,8 @@
             if (typeof window === 'undefined' || !content.children.length ||
                 document.body.classList.contains('hidden-content')) return;
             const title = document.getElementById('title-display');
-            const footer = document.getElementById('footer');
             const top = settings.showTitle && title.textContent ? title.getBoundingClientRect().bottom + 15 : 30;
-            const bottom = footer.getBoundingClientRect().top - 15;
+            const bottom = lyricsAvailableBottom();
             const height = Math.max(0, bottom - top);
             const width = Math.max(0, window.innerWidth * 0.95 - 40);
             content.style.top = top + 'px';
@@ -812,14 +880,14 @@
             if (ccliNum) {
                 footerHtml += ' © CCLI# ' + ccliNum;
             }
-            document.getElementById('footer').innerHTML = footerHtml;
+            document.getElementById('footer').textContent = footerHtml;
         }
         
         function resetSettings() {
             settings = { ...DEFAULT_SETTINGS };
             localStorage.removeItem('cbmDisplaySettings');
             applySettings();
-            liveUpdate.switchServer(settings.serverIp);
+            startLiveConnection(settings.serverIp);
             showSettings();
         }
         
@@ -839,22 +907,55 @@
         }
         
         function parseSlideLines(text) {
+            if (typeof text !== 'string') throw new TypeError('Slide text must be a string');
+            // Parse away from the document, then serialize only permitted formatting.
+            const template = document.createElement('template');
+            template.innerHTML = text;
+            const lines = [{ html: '', visible: '' }];
+            const allowed = new Set(['b', 'strong', 'i', 'em', 'u', 'sup', 'sub']);
+            const omitted = new Set(['script', 'style', 'template']);
+            const stack = [];
+            function newline() {
+                lines[lines.length - 1].html += stack.slice().reverse().map(tag => `</${tag}>`).join('');
+                lines.push({ html: stack.map(tag => `<${tag}>`).join(''), visible: '' });
+            }
+            function walk(node) {
+                if (node.nodeType === 3) {
+                    const parts = node.data.split(/\r\n|\r|\n/);
+                    parts.forEach((part, index) => {
+                        if (index) newline();
+                        const line = lines[lines.length - 1];
+                        line.visible += part;
+                        line.html += escapeHtml(part);
+                    });
+                } else if (node.nodeType === 1) {
+                    if (node.namespaceURI !== 'http://www.w3.org/1999/xhtml') return;
+                    const tag = node.localName;
+                    if (omitted.has(tag)) return;
+                    if (tag === 'br') { newline(); return; }
+                    if (allowed.has(tag)) {
+                        lines[lines.length - 1].html += `<${tag}>`;
+                        stack.push(tag);
+                    }
+                    for (const child of node.childNodes) walk(child);
+                    if (allowed.has(tag)) {
+                        stack.pop();
+                        lines[lines.length - 1].html += `</${tag}>`;
+                    }
+                }
+            }
+            for (const child of template.content.childNodes) walk(child);
             const englishLines = [];
             const chineseLines = new Set();
-            const decoder = document.createElement('div');
-            for (const line of text.replace(/<br\s*\/?>/gi, '\n').split('\n')) {
-                decoder.innerHTML = line;
-                const visible = decoder.textContent.replace(/\s+/g, '');
+            for (const line of lines) {
+                const visible = line.visible.replace(/\s+/g, '');
                 if (!visible) continue;
                 const characters = Array.from(visible);
                 const chineseCount = characters.filter(char =>
                     /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u.test(char)
                 ).length;
-                if (chineseCount / characters.length > 0.3) {
-                    chineseLines.add(visible);
-                } else {
-                    englishLines.push(line.trim());
-                }
+                if (chineseCount / characters.length > 0.3) chineseLines.add(visible);
+                else englishLines.push(line.html.trim());
             }
             return { englishLines, chineseLines: Array.from(chineseLines) };
         }
@@ -875,8 +976,9 @@
 
         // BEGIN live-update module
         // The viewer can create a connection with browser defaults, or supply the
-        // small network/clock adapters for deterministic tests. Slide data is not interpreted here.
-        function createLiveUpdate({ onData, onError, network, clock }) {
+        // small network/clock/document adapters for deterministic tests. Slide data is not interpreted here.
+        function createLiveUpdate({ onData, onError, network, clock, visibilityDocument }) {
+            if (visibilityDocument === undefined) visibilityDocument = typeof document === 'undefined' ? null : document;
             network = network || {
                 fetch: (...args) => fetch(...args),
                 WebSocket: typeof WebSocket === 'undefined' ? undefined : WebSocket,
@@ -894,6 +996,7 @@
                 const old = connection;
                 connection = null;
                 if (!old) return;
+                if (old.visibilityHandler) visibilityDocument.removeEventListener('visibilitychange', old.visibilityHandler);
                 clock.clearInterval(old.pollTimer);
                 if (old.reconnectTimer !== null) clock.clearTimeout(old.reconnectTimer);
                 for (const cancel of old.requests) cancel();
@@ -1003,6 +1106,17 @@
                     ws.addEventListener('close', disconnected);
                 }
 
+                if (visibilityDocument && typeof visibilityDocument.addEventListener === 'function' &&
+                    typeof visibilityDocument.removeEventListener === 'function') {
+                    let previousVisibility = visibilityDocument.visibilityState;
+                    state.visibilityHandler = () => {
+                        if (!current()) return;
+                        const nextVisibility = visibilityDocument.visibilityState;
+                        if (previousVisibility === 'hidden' && nextVisibility === 'visible') refresh();
+                        previousVisibility = nextVisibility;
+                    };
+                    visibilityDocument.addEventListener('visibilitychange', state.visibilityHandler);
+                }
                 state.pollTimer = clock.setInterval(() => refresh(false), 1000);
                 refresh();
                 if (network.WebSocket) discover();
@@ -1011,8 +1125,46 @@
         }
         // END live-update module
 
+        // This reminder belongs to the page startup, not a connection lifetime.
+        let fullscreenReminderDismissed = !!document.fullscreenElement;
+        let fullscreenReminderTimer = null;
+        function dismissFullscreenReminder() {
+            fullscreenReminderDismissed = true;
+            if (fullscreenReminderTimer !== null) clearTimeout(fullscreenReminderTimer);
+            fullscreenReminderTimer = null;
+            document.getElementById('fullscreen-reminder').classList.add('hidden');
+            fitLyrics();
+        }
+        function startFullscreenReminderCountdown() {
+            if (!fullscreenReminderDismissed && fullscreenReminderTimer === null) {
+                fullscreenReminderTimer = setTimeout(dismissFullscreenReminder, 5000);
+            }
+        }
+        document.getElementById('fullscreen-reminder').classList.toggle('hidden', fullscreenReminderDismissed);
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) dismissFullscreenReminder();
+        });
+
+        // Connection help belongs to presentation, not the networking module.
+        let failedLiveRequests = 0;
+        let lyricsLoaded = false;
+        function updateConnectionHelp() {
+            const show = failedLiveRequests >= 5;
+            document.getElementById('connection-help').classList.toggle('hidden', !show || lyricsLoaded);
+            document.getElementById('settings-connection-help').classList.toggle('hidden', !show);
+        }
+        function startLiveConnection(server, replace = true) {
+            failedLiveRequests = 0;
+            lyricsLoaded = false;
+            updateConnectionHelp();
+            if (replace) liveUpdate.switchServer(server);
+            else liveUpdate.start(server);
+        }
+
         // Interpret live slide data in the presentation layer.
         function displayLiveData(data) {
+            failedLiveRequests = 0;
+            updateConnectionHelp();
             try {
                 if (!data.results || !Array.isArray(data.results.slides)) {
                     clearSlide();
@@ -1061,7 +1213,7 @@
                 
                 let footerHtml = 'CBM Flushing';
                 if (settings.ccliNumber) {
-                    footerHtml += ' © CCLI# ' + settings.ccliNumber;
+                    footerHtml += ' © CCLI# ' + escapeHtml(settings.ccliNumber);
                 }
                 footerHtml += footerExtra;
                 document.getElementById('footer').innerHTML = footerHtml;
@@ -1096,18 +1248,26 @@
                     // when the lyrics themselves are unchanged.
                     const title = document.getElementById('title-display');
                     const top = settings.showTitle && title.textContent ? title.getBoundingClientRect().bottom + 15 : 30;
-                    const height = Math.max(0, document.getElementById('footer').getBoundingClientRect().top - 15 - top);
+                    const height = Math.max(0, lyricsAvailableBottom() - top);
                     if (content.style.top !== top + 'px' || content.style.height !== height + 'px') fitLyrics();
                 }
                 document.getElementById('error').style.display = 'none';
+                lyricsLoaded = true;
+                startFullscreenReminderCountdown();
                 setFadeState(false);
                 
             } catch (error) {
-                displayLiveError(error);
+                reportLiveError(error);
             }
         }
         
         function displayLiveError(error) {
+            failedLiveRequests++;
+            updateConnectionHelp();
+            reportLiveError(error);
+        }
+
+        function reportLiveError(error) {
             console.error('Error:', error);
             document.getElementById('error').textContent = 'Error: ' + error.message;
             document.getElementById('error').style.display = 'block';
@@ -1151,7 +1311,7 @@
             document.getElementById('modal-overlay').classList.remove('hidden');
         }
         
-        liveUpdate.start(settings.serverIp);
+        startLiveConnection(settings.serverIp, false);
     </script>
 </body>
 </html>

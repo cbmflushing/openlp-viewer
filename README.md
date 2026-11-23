@@ -13,11 +13,11 @@ A standalone browser page for displaying live OpenLP lyrics on a projector or se
 5. Click **Save & Start**.
 6. Send a song live in OpenLP. Move the browser to the display screen and use the browser's full-screen mode.
 
-The viewer refreshes immediately when OpenLP sends a WebSocket state notification, and also checks for the selected live slide every second as a fallback. Live-slide and port-discovery requests time out after five seconds, so stalled requests cannot block updates indefinitely. It discovers the WebSocket port from OpenLP's system API, defaulting to `4317` if discovery fails or times out, and reconnects automatically with bounded backoff. Settings are saved in the current browser.
+The viewer refreshes immediately when OpenLP sends a WebSocket state notification or a hidden page becomes visible again, and also checks for the selected live slide every second as a fallback. Live-slide and port-discovery requests time out after five seconds, so stalled requests cannot block updates indefinitely. It discovers the WebSocket port from OpenLP's system API, defaulting to `4317` if discovery fails or times out, and reconnects automatically with bounded backoff. Settings are saved in the current browser.
 
 ## Controls
 
-- **Settings button:** reopen settings to change the server, display language, appearance, title, or CCLI number. On desktop, Settings stays visible on empty slides and appears on hover while lyrics are showing. During local blackout, hover over the upper-right Settings button or press Tab to reveal it. On touch devices the button stays visible. The viewer version appears beside the settings heading. Save to apply changes; Skip, Escape, or clicking outside the dialog discards unsaved changes.
+- **Settings button:** reopen settings to change the server, display language, appearance, title, or CCLI number. On desktop, Settings stays visible on empty slides and appears on hover while lyrics are showing. During local blackout, hover over the upper-right Settings button or press Tab to reveal it. On touch devices the button stays visible. The viewer version and a **Get the latest version** GitHub link appear beside the settings heading; the link opens a new tab without interrupting the display. Save to apply changes; Skip, Escape, or clicking outside the dialog discards unsaved changes.
 - **`.` (period):** toggle local blackout. This affects only this viewer, not OpenLP or other displays.
 - **Colors:** choose a preset swatch for the background, English, Chinese, or footer. The selected HEX value appears beneath each palette, including for custom colors. Expand **Advanced** to use the custom picker, enter a six-digit HEX value (for example, `#12ab34`), or edit the red, green, and blue channels (whole numbers from 0 to 255). Invalid or incomplete values are highlighted and must be corrected before saving; choosing a preset or picker color also replaces them.
 - **Reset:** restore the default settings.
@@ -26,22 +26,25 @@ The viewer refreshes immediately when OpenLP sends a WebSocket state notificatio
 
 - The default display language is **English + Chinese**; **English only** hides lines classified as Chinese. The saved choice persists in the browser, and Reset restores bilingual display.
 - **Automatically fit lyrics to screen** is on by default, including for existing settings. It scales both languages together to fit the available width and height, keeping the original line breaks and reserving space for the title and footer. Turn it off and save to restore the original responsive font sizes; Reset turns it back on. The fit is found within 0.05 CSS pixels of the measured maximum.
-- Extremely small windows, exceptionally long lines, many lines, or oversized title/footer text may leave too little room for legible lyrics, or even for the fixed margins and title/footer themselves. Use a larger display or shorten the slide/title; browser font rendering and trusted slide formatting can also affect the result.
+- Extremely small windows, exceptionally long lines, many lines, or oversized title/footer text may leave too little room for legible lyrics, or even for the fixed margins and title/footer themselves. Use a larger display or shorten the slide/title; browser font rendering and slide formatting can also affect the result.
 - English lines appear first, followed by Chinese lines when enabled.
 - Chinese is detected from the text itself, not HTML formatting: a line is Chinese when more than 30% of its non-whitespace characters are Chinese characters.
 - Chinese lines have whitespace removed and duplicates collapsed. Keep English and Chinese on separate lines; mixed-language lines are classified as a whole.
 - Empty slides, including slides with no visible lyrics after language filtering, fade to black in about 300 ms; lyrics returning restores the display. This is **not** synchronization with OpenLP's blackout button.
 - Network errors preserve the last display state rather than treating the slide as empty.
+- A startup reminder suggests using the browser's full-screen control and keeping the viewer visible in its own window. It remains until visible selected lyrics arrive, then disappears after five seconds; entering page fullscreen dismisses it immediately. It does not return for later song or connection changes. Local blackout hides it while active. Browser-level fullscreen may not be reported to the page.
+- Keep the viewer visible in its own window. Browsers may slow or suspend background tabs, so updates cannot be guaranteed while the page is frozen. Visibility detection does not indicate whether throttling has occurred; losing keyboard focus alone does not mean the viewer is hidden.
 
 ## Troubleshooting
 
 - **No lyrics:** make sure a song slide is live and selected in OpenLP. An empty slide intentionally shows black. Also check whether local blackout (`.`) is enabled.
 - **Connection error:** check the host, port, remote API settings, network, and firewall. On another computer, `localhost` refers to that computer—not the OpenLP computer.
+- **Connection help:** after five consecutive failed live-slide requests, check that OpenLP is running, its remote server is enabled, and the server address is correct. Before lyrics have loaded for the current connection, help appears on the display with an Open Settings button; afterward, help appears only inside settings. Retries continue automatically. Any successful response, including an empty slide, clears the notice and resets the failure count. Reset or changing the server starts a new connection lifetime.
 - **Check the API:** open `http://HOST:4316/api/controller/live/text` in the browser, replacing `HOST` with the OpenLP computer's address. It should return JSON.
 - **Push updates unavailable:** check that the discovered WebSocket port (normally `4317`) is reachable through the firewall. Polling continues every second if WebSockets or port discovery are unavailable; if discovery fails with a non-default WebSocket port, polling remains the fallback.
 - **Browser blocks requests:** check the browser console for CORS or mixed-content errors. The viewer uses HTTP and unencrypted WebSockets; an HTTPS-hosted page can block them. A suitable proxy and compatible deployment configuration are needed for HTTPS.
 
-Use only trusted OpenLP content: English slide formatting is rendered as HTML. Keep the remote API on a trusted network.
+Keep the unauthenticated remote API on a trusted network. English lyrics retain only bold, italic, underline, superscript and subscript formatting; other wrappers and attributes are removed. Non-display and foreign-namespace subtrees are omitted. The text fallback is also interpreted as markup for compatibility.
 
 ## Automatic versioning for contributors
 
@@ -69,9 +72,10 @@ node test_gitignore.cjs
 node --test test_version_hook.cjs
 ```
 
-Browser checks additionally require Google Chrome (or pass a Chromium executable path). The tablet touch-emulation test requires Node.js 22 or newer:
+Browser checks additionally require Google Chrome (or pass a Chromium executable path). The tablet touch-emulation, connection-help, and fullscreen-reminder tests require Node.js 22 or newer:
 
 ```sh
+node test_safe_display.cjs
 node test_layout.cjs
 node test_layout.cjs /path/to/chromium
 node test_colors.cjs
@@ -82,6 +86,10 @@ node test_tablet.cjs
 node test_tablet.cjs /path/to/chromium
 node test_version.cjs
 node test_version.cjs /path/to/chromium
+node test_connection_help.cjs
+node test_connection_help.cjs /path/to/chromium
+node test_fullscreen_reminder.cjs
+node test_fullscreen_reminder.cjs /path/to/chromium
 ```
 
 The integration script requires Python 3 and a live OpenLP server. Its `SERVER` value is hard-coded in `test_integration.py`; inspect it before running, and adjust it locally if your server is elsewhere. There is no command-line server override:

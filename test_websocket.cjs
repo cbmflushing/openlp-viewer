@@ -29,7 +29,7 @@ function setup(withWebSocket = true, saved = null) {
         fetch: (url, options) => { const d = deferred(); requests.push({url, options, ...d}); return d.promise; }
     });
     if (!withWebSocket) delete context.WebSocket;
-    vm.runInContext(dom + '\nthis.get = get; this.document = {body: new Element(), createElement: () => new Element(), getElementById: get, addEventListener() {}};', context);
+    vm.runInContext(dom + '\nthis.get = get; this.document = {body: new Element(), createElement: tag => tag === "template" ? new Template() : new Element(), getElementById: get, addEventListener() {}};', context);
     // Wrap, rather than replace, the real module: verify lifecycle calls and real network-to-DOM flow.
     const instrumented = script.replace('function createLiveUpdate(', 'function realCreateLiveUpdate(').replace(
         '        // END live-update module', `        function createLiveUpdate(options) {
