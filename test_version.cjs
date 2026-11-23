@@ -13,13 +13,22 @@ const checks = `<script>
 (async()=>{
  const check=(x,m)=>{if(!x)throw Error(m)};
  const label=document.getElementById('viewer-version'), modal=document.getElementById('modal');
+ const update=document.getElementById('viewer-update-link');
  const expected=${JSON.stringify(expected)};
  check(label && modal.contains(label),'version label belongs to settings');
+ check(update && modal.contains(update),'update link belongs to settings');
+ check(update.tagName==='A' && update.textContent.trim()==='Get the latest version','update link has a clear accessible label');
+ check(update.href==='https://github.com/cbmflushing/openlp-viewer','update link points to the repository');
+ check(update.target==='_blank' && update.relList.contains('noopener') && update.relList.contains('noreferrer'),'update link opens a safe new tab');
+ check(label.parentElement.contains(update),'update link is near the version');
  check(!label.matches('input,select,textarea,[contenteditable]'),'version is not editable');
- const visible=()=>{const r=label.getBoundingClientRect();return !!r.width && !!r.height && getComputedStyle(label).visibility==='visible'};
- check(!visible(),'version hidden when settings closed');
+ const isVisible=el=>{const r=el.getBoundingClientRect();return !!r.width && !!r.height && getComputedStyle(el).visibility==='visible'};
+ const visible=()=>isVisible(label);
+ check(!visible() && !isVisible(update),'version and update link hidden when settings closed');
  showSettings();
  check(visible() && label.textContent === expected,'version visibly displayed in settings');
+ check(isVisible(update),'update link visible in settings');
+ update.focus(); check(document.activeElement===update,'update link is keyboard focusable');
  const bounds=label.getBoundingClientRect(), viewport=modal.getBoundingClientRect();
  check(bounds.top>=viewport.top && bounds.bottom<=viewport.bottom,'version initially in view without scrolling');
  closeModal(true);
@@ -27,7 +36,7 @@ const checks = `<script>
  check(!Object.keys(JSON.parse(localStorage.getItem('cbmDisplaySettings'))).some(k=>/version/i.test(k)),'version not saved as preference');
  showSettings(); check(visible() && label.textContent === expected,'version survives save');
  resetSettings(); check(visible() && label.textContent === expected,'version survives reset');
- closeModal(false); check(!visible(),'version hidden on projection after reset');
+ closeModal(false); check(!visible() && !isVisible(update),'version and update link hidden on projection after reset');
  for(const id of ['content','title-display','footer','error']) check(!document.getElementById(id).textContent.includes(expected),'version absent from projection '+id);
  parent.postMessage({ok:true},'*');
 })().catch(e=>parent.postMessage({ok:false,error:e.stack},'*'));

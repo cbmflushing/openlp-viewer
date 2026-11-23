@@ -17,7 +17,7 @@ function deferred() {
 }
 const response = data => ({ok: true, json: () => Promise.resolve(data)});
 const notice = '{"results":{"item":"song"}}';
-function setup({websocket = true, abort = true} = {}) {
+function setup({websocket = true, abort = true, visibilityDocument} = {}) {
     let now = 0, nextId = 0;
     const timers = new Map(), requests = [], sockets = [], data = [], errors = [];
     const clock = {
@@ -47,7 +47,7 @@ function setup({websocket = true, abort = true} = {}) {
         fetch(url, options) { const d = deferred(); requests.push({url, options, ...d}); return d.promise; },
         WebSocket: websocket ? Socket : undefined, AbortController: abort ? AbortController : undefined, Blob, URL
     };
-    const client = context.createLiveUpdate({onData: value => data.push(value), onError: error => errors.push(error), network, clock});
+    const client = context.createLiveUpdate({onData: value => data.push(value), onError: error => errors.push(error), network, clock, visibilityDocument});
     function take(part) {
         const index = requests.findIndex(r => r.url.includes(part));
         assert.notEqual(index, -1, `missing ${part}; pending: ${requests.map(r => r.url)}`);
@@ -61,6 +61,60 @@ async function connect(t, port = 9876) {
     return t.sockets.at(-1);
 }
 (async () => {
+    // Visibility restoration uses the same superseding queue and connection lifetime.
+    const listeners = new Set();
+    const doc = {
+        visibilityState: 'visible',
+        addEventListener(type, fn) { assert.equal(type, 'visibilitychange'); listeners.add(fn); },
+        removeEventListener(type, fn) { assert.equal(type, 'visibilitychange'); listeners.delete(fn); },
+        emit(state) { this.visibilityState = state; for (const fn of [...listeners]) fn(); }
+    };
+    const v = setup({websocket: false, visibilityDocument: doc});
+    v.client.start('old:4316');
+    assert.equal(listeners.size, 1, 'one listener belongs to the connection');
+    const initialVisibilityRead = v.take(live);
+    doc.emit('visible');
+    doc.emit('hidden'); doc.emit('hidden'); doc.emit('visible'); doc.emit('visible');
+    doc.emit('hidden'); doc.emit('visible');
+    assert.equal(v.requests.length, 0, 'restorations coalesce behind the active read');
+    initialVisibilityRead.resolve(response({stale: true})); await tick();
+    assert.equal(v.data.length, 0, 'restoration supersedes the active result');
+    const visibilityRead = v.take(live);
+    visibilityRead.resolve(response({fresh: true})); await tick();
+    assert.equal(v.data.at(-1).fresh, true);
+    assert.equal(v.requests.length, 0, 'repeated events request only one follow-up');
+    doc.emit('visible'); assert.equal(v.requests.length, 0, 'visible-only event is not a transition');
+    doc.emit('hidden'); doc.emit('visible');
+    const oldRead = v.take(live);
+    doc.emit('hidden');
+    const oldListener = [...listeners][0];
+    v.client.switchServer('new:4316');
+    assert.equal(listeners.size, 1, 'replacement removes the previous listener');
+    const newRead = v.take(live);
+    doc.visibilityState = 'visible'; oldListener(); oldRead.resolve(response({old: true})); await tick();
+    assert.equal(v.data.length, 1, 'old listener and response cannot affect the replacement');
+    doc.emit('hidden'); doc.emit('visible');
+    newRead.resolve(response({superseded: true})); await tick();
+    assert.equal(v.data.length, 1);
+    const newFresh = v.take(live); assert.match(newFresh.url, /new:4316/);
+    newFresh.resolve(response({new: true})); await tick();
+    assert.equal(v.data.at(-1).new, true);
+    doc.emit('hidden'); doc.emit('visible');
+    const stoppedVisibilityRead = v.take(live);
+    doc.emit('hidden'); doc.emit('visible'); // Queue a refresh behind the active request.
+    v.client.stop(); assert.equal(listeners.size, 0);
+    stoppedVisibilityRead.resolve(response({stopped: true}));
+    doc.emit('hidden'); doc.emit('visible'); oldListener(); await tick();
+    assert.equal(v.requests.length, 0, 'visibility cannot restart a stopped connection');
+    assert.equal(v.data.length, 2, 'stopped visibility work does not deliver');
+    doc.emit('hidden');
+    v.client.start('again:4316'); assert.equal(listeners.size, 1);
+    const restartedVisibilityRead = v.take(live);
+    doc.emit('visible'); restartedVisibilityRead.resolve(response({stale: true})); await tick();
+    v.take(live).resolve(response({restarted: true})); await tick();
+    assert.equal(v.data.at(-1).restarted, true, 'starting hidden tracks the initial state');
+    v.client.stop(); assert.equal(listeners.size, 0);
+
     // Polls do not invalidate a slow request; push bursts invalidate it once and coalesce.
     const t = setup(); t.client.start('first:4316');
     const initial = t.take(live); const ws = await connect(t);

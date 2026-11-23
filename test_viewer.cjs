@@ -41,6 +41,24 @@ class Element {
     }
     get textContent() { return this.text; }
 }
+// Minimal inert-template adapter for the simple markup used by these VM tests.
+// Browser parsing and sanitization behavior is covered by test_safe_display.cjs.
+class Template {
+    set innerHTML(value) {
+        this.content = {childNodes: []};
+        const stack = [this.content];
+        for (const token of value.match(/<[^>]*>|[^<]+/g) || []) {
+            if (token.startsWith('</')) { if (stack.length > 1) stack.pop(); continue; }
+            if (token.startsWith('<')) {
+                const match = token.match(/^<([a-z]+)/i);
+                if (!match) continue;
+                const node = {nodeType: 1, localName: match[1].toLowerCase(), namespaceURI: 'http://www.w3.org/1999/xhtml', childNodes: []};
+                stack[stack.length - 1].childNodes.push(node);
+                if (node.localName !== 'br') stack.push(node);
+            } else stack[stack.length - 1].childNodes.push({nodeType: 3, data: decode(token)});
+        }
+    }
+}
 const elements = new Map();
 const get = id => {
     if (!elements.has(id)) elements.set(id, new Element());
@@ -55,7 +73,7 @@ let poll;
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const context = vm.createContext({
     document: {
-        body: new Element(), createElement: () => new Element(), getElementById: get,
+        body: new Element(), createElement: tag => tag === 'template' ? new Template() : new Element(), getElementById: get,
         addEventListener: (event, handler) => { handlers[event] = handler; }
     },
     localStorage: {
@@ -82,7 +100,7 @@ async function display(value) { payload = value; await refresh(); }
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(dark(), true);
     assert.deepEqual(parse('<span style="color:red">Amazing grace</span>'), {
-        englishLines: ['<span style="color:red">Amazing grace</span>'], chineseLines: []
+        englishLines: ['Amazing grace'], chineseLines: []
     });
     assert.deepEqual(parse('Amazing grace<br>奇異恩典<br><span><em>奇 異 恩 典</em></span>'), {
         englishLines: ['Amazing grace'], chineseLines: ['奇異恩典']
@@ -132,7 +150,7 @@ async function display(value) { payload = value; await refresh(); }
     // Malformed presentation data must still reach the existing error display.
     await display(slide({text: {invalid: true}}));
     assert.equal(get('error').style.display, 'block');
-    assert.match(get('error').textContent, /replace/);
+    assert.match(get('error').textContent, /string/);
     await display(slide({text: 'Recovered'}));
     assert.equal(get('error').style.display, 'none');
 
